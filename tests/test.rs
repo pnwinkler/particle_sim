@@ -1,5 +1,3 @@
-// use particle_sim;
-
 pub fn add(left: usize, right: usize) -> usize {
     left + right
 }
@@ -7,6 +5,7 @@ pub fn add(left: usize, right: usize) -> usize {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use particle_sim::*;
 
     #[test]
     fn it_works() {
@@ -32,11 +31,6 @@ mod tests {
         assert_eq!(result, 1000.0);
     }
 
-    // TODO
-    // #[test]
-    // fn test_convert_velocity_to_newtons() {
-    // }
-
     #[test]
     fn test_calculate_particle_acceleration() {
         let result = particle_sim::calculate_particle_acceleration(2.0, 1.0, 1.0);
@@ -54,26 +48,80 @@ mod tests {
     //     assert_eq!(result, 1.0);
     // }
 
-    // TODO: implement test once the tested function is pure(r)
     #[test]
     fn test_calulate_friction() {
-        // TODO: test for objects not in contact with one another (should be 0 friction)
+        // This formula may break. The point is that we want any y location at which the particle touches the ground.
+        let touching_ground_y_pos = SCREEN_HEIGHT - 1.0;
 
-        // In a simple calculation, you would calculate the normal force of a 2-kg block of wood sitting on a surface as N = 2 kg × 9.8 N/kg = 19.6 N
-        let result = particle_sim::calculate_friction(1.0, 2.0, 1.0);
+        // objects not in contact should have 0 friction
+        let particle_1 = Particle {
+            x_pos: 5.0,
+            y_pos: 5.0,
+            x_velocity_m_s: 5.0,
+            y_velocity_m_s: 0.0,
+        };
+        let result = particle_sim::calculate_friction_deceleration(&particle_1, 0.2);
+        assert_eq!(result, 0.0);
+
+        // objects in contact should have friction
+        let particle_ground = Particle {
+            x_pos: 0.0,
+            y_pos: touching_ground_y_pos,
+            x_velocity_m_s: 5.0,
+            y_velocity_m_s: 0.0,
+        };
+        let result = particle_sim::calculate_friction_deceleration(&particle_ground, 0.2);
+        assert_eq!(result, -1.96);
+
+        // fast moving objects should have more friction than slow moving objects
+        let particle_slow = Particle {
+            x_pos: 5.0,
+            y_pos: touching_ground_y_pos,
+            x_velocity_m_s: 1.0,
+            y_velocity_m_s: 0.0,
+        };
+        let result_slow = particle_sim::calculate_friction_deceleration(&particle_slow, 0.2);
+        let particle_fast = Particle {
+            x_pos: 5.0,
+            y_pos: touching_ground_y_pos,
+            x_velocity_m_s: 10.0,
+            y_velocity_m_s: 0.0,
+        };
+        let result_fast = particle_sim::calculate_friction_deceleration(&particle_fast, 0.2);
+        assert!(result_fast.abs() > result_slow.abs());
+
+        // objects in contact should have friction regardless of direction
+        let particle_ground = Particle {
+            x_pos: 0.0,
+            y_pos: touching_ground_y_pos,
+            x_velocity_m_s: -1.0,
+            y_velocity_m_s: 0.0,
+        };
+        let result = particle_sim::calculate_friction_deceleration(&particle_ground, 0.2);
         assert_eq!(result, 1.0);
 
-        let result = particle_sim::calculate_friction(3.0, 1.0, 2.0);
-        assert_eq!(result, -1.0);
+        // TODO: test the relationship between friction coefficient magnitude and velocity magnitude.
+        // The idea is to codify a logical relationship between the two units, instead of the current
+        // slightly magical numbers (e.g. why does 0.01 friction coefficient almost instantly stop +5 velocity)?
+        // what exactly is the relationship between the two numbers?
+
+        // Test negative friction. It's not required, or how physics works, but it's fun.
+        let particle_ground = Particle {
+            x_pos: 0.0,
+            y_pos: touching_ground_y_pos,
+            x_velocity_m_s: -5.0,
+            y_velocity_m_s: 0.0,
+        };
+        let result = particle_sim::calculate_friction_deceleration(&particle_ground, -0.2);
+        assert_eq!(result, -1.96);
     }
 
-    // TODO: implement test once the tested function is pure(r)
-    // #[test]
-    // fn test_apply_gravity_to_particles() {
-    //     let result = particle_sim::apply_gravity_to_particles();
-    //     assert_eq!(result, 1.0);
-    //
-    //     let result = particle_sim::apply_gravity_to_particles(3.0, 1.0, 2.0);
-    //     assert_eq!(result, -1.0);
-    // }
+    #[test]
+    fn test_apply_gravity_to_particles() {
+        let result = particle_sim::calculate_gravity_effect_on_velocity(9.8,1.0);
+        assert_eq!(result, 9.8);
+
+        let result = particle_sim::calculate_gravity_effect_on_velocity(9.8,2.0);
+        assert_eq!(result, 19.6);
+    }
 }

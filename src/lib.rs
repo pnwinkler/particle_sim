@@ -1,11 +1,7 @@
 use macroquad::prelude::*;
 
-const SCREEN_WIDTH: f32 = 1080.0;
-const SCREEN_HEIGHT: f32 = 720.0;
-// const FPS: u16 = 60;
-
-// The default color of a particle
-const PARTICLE_COLOR: Color = RED;
+pub const SCREEN_WIDTH: f32 = 1080.0;
+pub const SCREEN_HEIGHT: f32 = 720.0;
 
 // The default diameter in pixels of a particle
 const PARTICLE_RADIUS_PX: f32 = 10.0;
@@ -13,11 +9,14 @@ const PARTICLE_RADIUS_PX: f32 = 10.0;
 // The weight of each particle in kilograms
 const PARTICLE_MASS_KG: f32 = 1.0;
 
+// The default color of a particle
+const PARTICLE_COLOR: Color = RED;
+
 // Simulation parameters
 const PIXELS_PER_METER: f32 = 10.0;
 const GRAVITY_MS: f32 = 9.8;
-const FRICTION_STATIC_COEFFICIENT: f32 = 0.6;
-const FRICTION_DYNAMIC_COEFFICIENT: f32 = 0.5;
+// const FRICTION_STATIC_COEFFICIENT: f32 = 0.02;
+const FRICTION_DYNAMIC_COEFFICIENT: f32 = 0.01;
 
 /* Todo: consider...
 - friction
@@ -34,19 +33,21 @@ const FRICTION_DYNAMIC_COEFFICIENT: f32 = 0.5;
 - etc
 */
 
-const FONT_SIZE: f32 = 30.0;
+// Display parameters
+const STATS_FONT_SIZE: f32 = 30.0;
+const STATS_X_ANCHOR: f32 = SCREEN_WIDTH - (0.4 * SCREEN_WIDTH);
+const STATS_COLOR: Color = GREEN;
 
 pub struct Particle {
     // Particle position in pixels
-    x_pos: f32,
-    y_pos: f32,
+    pub x_pos: f32,
+    pub y_pos: f32,
 
     // Signed particle velocity in meters per second
-    x_velocity_m_s: f32,
-    y_velocity_m_s: f32,
-
+    pub x_velocity_m_s: f32,
+    pub y_velocity_m_s: f32,
     // Particle lifetime in milliseconds
-    lifetime_ms: u16,
+    // lifetime_ms: u16,
 }
 
 pub fn draw_particles(particles: &Vec<Particle>) {
@@ -68,16 +69,12 @@ pub fn convert_pixels_to_meters(pixels: f32, pixels_per_meter: f32) -> f32 {
     return pixels / pixels_per_meter;
 }
 
-pub fn convert_newtons_to_velocity(newtons: f32, object_mass_kg: f32) -> f32 {
-    // For a given object, return its newtons converted into velocity
-    return 3.0; // TODO UNDO
-}
-
 pub fn convert_velocity_to_newtons(
     old_velocity: f32,
     new_velocity: f32,
     time_elapsed_seconds: f32,
 ) -> f32 {
+    // Given the velocity of an object in a given axis, return that velocity expressed in unsigned Newtons.
     // TODO: don't forget to encode direction or something
     // !! TODO: confirm that this will not return NEGATIVE Newtons when decelerating !!
 
@@ -107,76 +104,67 @@ pub fn particle_touching_ground(particle: &Particle) -> bool {
     return (particle.y_pos + PARTICLE_RADIUS_PX) >= SCREEN_HEIGHT;
 }
 
-// TODO: rework this function. It's confusing that it returns a velocity
-pub fn calculate_friction(
+pub fn calculate_friction_deceleration(
     particle: &Particle,
-    friction_static_coefficient: f32,
     friction_dynamic_coefficient: f32,
 ) -> f32 {
     /*
-    Calculate and apply friction to a particle.
-    The coefficients should be positive values.
+    Calculate friction deceleration for a particle. Returns a value <= 0 if object is moving right, else >= 0.
+    For realistic friction, the coefficients should be positive values.
     For now, we only apply friction in the horizontal dimension and for particles in contact with the ground.
     We use the following formulas:
-        μ = F/N
-            where μ is friction, F is the frictional force and N is the normal force
-        N = mg
-            where N is the normal force, m is the object's mass, and g the acceleration due to gravity
-            we use this formula in cases where our target object rests on top of a flat object
-        N = mg cos(θ)
-            as above, but theta is the angle of incline of the supporting surface
+        F=ma
     */
+    // TODO: implement static coefficient
 
-    // arbitrarily chosen friction coefficient values (the F in μ = F/N)
-    // let f_static = 0.6;
-    // let f_dynamic = 0.5;
-
-    // if object isn't moving, use static
-    // else dynamic
     if !particle_touching_ground(particle) {
         return 0.0;
     }
 
     // arbitrarily chosen value used to decide whether something counts as "moving" or not
-    let cutoff_velocity = 0.001;
-
-    let moving = particle.x_velocity_m_s > cutoff_velocity;
-    let f = if moving {
-        friction_dynamic_coefficient
-    } else {
-        friction_static_coefficient
-    };
-    // for now we assume a flat surface, so we ignore theta
-    // TODO: review formula. Does this make sense?
-    let n = PARTICLE_MASS_KG * GRAVITY_MS;
-    let result_newtons = f / n;
-    // TODO: debug. This seems high
-    println!("Friction in Newtons: {}", result_newtons);
-    println!("Friction in velocity: {}", convert_newtons_to_velocity(result_newtons, PARTICLE_MASS_KG));
-
-    // arbitrary cut-off
-    if particle.x_velocity_m_s < cutoff_velocity {
+    let cutoff_velocity = 0.0001;
+    if particle.x_velocity_m_s.abs() < cutoff_velocity {
         return 0.0;
     }
 
-    return convert_newtons_to_velocity(result_newtons, PARTICLE_MASS_KG);
+    // friction coefficient * mass * gravity
+    let f = friction_dynamic_coefficient;
+    let friction_force = f * PARTICLE_MASS_KG * GRAVITY_MS;
+    let friction_deceleration = friction_force / PARTICLE_MASS_KG;
+
+    // We need to oppose the object's velocity
+    if particle.x_velocity_m_s > 0.0 {
+        if friction_deceleration > particle.x_velocity_m_s {
+            return -1.0 * particle.x_velocity_m_s;
+        }
+        return -1.0 * friction_deceleration;
+    }
+
+    if particle.x_velocity_m_s < 0.0 {
+        if friction_deceleration > particle.x_velocity_m_s.abs() {
+            return -1.0 * particle.x_velocity_m_s;
+        }
+    }
+    return friction_deceleration;
 }
 
 pub fn apply_velocity_to_particle_position(particle: &mut Particle, time_elapsed_seconds: f64) {
-    let mut p = particle;
+    // Using the particle's velocity, update its pixel position, while respecting the ratio of pixels per meter.
+    let p = particle;
     let multiplier = time_elapsed_seconds as f32;
     p.y_pos += convert_meters_to_pixels(p.y_velocity_m_s * multiplier, PIXELS_PER_METER);
     p.x_pos += convert_meters_to_pixels(p.x_velocity_m_s * multiplier, PIXELS_PER_METER);
 }
 
-pub fn clamp_particle_position_to_screen(particle: &mut Particle, time_elapsed_seconds: f64) {
-    // Update the particle's position based on already calculated forces
-    let mut p = particle;
+pub fn clamp_particle_position_to_screen(particle: &mut Particle) {
+    // If the particle would be off-screen, move it back on-screen and set its velocity in that axis to zero.
+    let p = particle;
     if SCREEN_HEIGHT < (p.y_pos + PARTICLE_RADIUS_PX) {
         p.y_pos = SCREEN_HEIGHT - PARTICLE_RADIUS_PX;
         p.y_velocity_m_s = 0.0;
     } else if 0.0 > (p.y_pos - PARTICLE_RADIUS_PX) {
-        p.y_pos = 50.0;
+        p.y_pos = 2.0 * PARTICLE_RADIUS_PX;
+        p.y_velocity_m_s = 0.0;
     }
 
     if SCREEN_WIDTH < (p.x_pos + PARTICLE_RADIUS_PX) {
@@ -188,13 +176,16 @@ pub fn clamp_particle_position_to_screen(particle: &mut Particle, time_elapsed_s
     }
 }
 
-pub fn calculate_gravity(time_elapsed_seconds: f64) -> f32 {
-    return GRAVITY_MS * time_elapsed_seconds as f32;
+pub fn calculate_gravity_effect_on_velocity(
+    gravity_acceleration_ms: f32,
+    time_elapsed_seconds: f64,
+) -> f32 {
+    // Calculate the effect of gravity in meters over the elapsed timeframe.
+    return gravity_acceleration_ms * time_elapsed_seconds as f32;
 }
 
-pub fn draw_stats(particles: &Vec<Particle>, last_tick_time: f64) {
-    // fps, mean y velocity, mean x velocity, meters height, particle count, mean altitude in meters
-    let x_anchor = SCREEN_WIDTH - (0.4 * SCREEN_WIDTH);
+pub fn draw_stats(particles: &Vec<Particle>) {
+    // Draw stats to screen
 
     let mut sum_y_velocity = 0.0;
     let mut sum_x_velocity = 0.0;
@@ -233,10 +224,10 @@ pub fn draw_stats(particles: &Vec<Particle>, last_tick_time: f64) {
     for (idx, s) in strings.iter().enumerate() {
         draw_text(
             &s,
-            x_anchor,
+            STATS_X_ANCHOR,
             idx as f32 * y_offset + y_offset,
-            FONT_SIZE,
-            GREEN,
+            STATS_FONT_SIZE,
+            STATS_COLOR,
         );
     }
 }
@@ -244,15 +235,14 @@ pub fn draw_stats(particles: &Vec<Particle>, last_tick_time: f64) {
 pub async fn p_main() {
     // Setup
     request_new_screen_size(SCREEN_WIDTH, SCREEN_HEIGHT);
-    let mut last_tick_time = get_time();
     let mut particles: Vec<Particle> = Vec::new();
     particles.push(Particle {
         x_pos: SCREEN_WIDTH / 2.0,
         y_pos: 5.0,
-        x_velocity_m_s: 5.0,
+        x_velocity_m_s: 10.0,
         y_velocity_m_s: 0.0,
-        lifetime_ms: 9999,
     });
+    let mut last_tick_time = get_time();
 
     // Main loop
     loop {
@@ -261,26 +251,20 @@ pub async fn p_main() {
         clear_background(BLACK);
 
         for p in particles.iter_mut() {
-            p.y_velocity_m_s += calculate_gravity(time_elapsed);
-            // println!("{}", p.y_velocity_m_s);
+            p.y_velocity_m_s += calculate_gravity_effect_on_velocity(GRAVITY_MS, time_elapsed);
 
-            p.x_velocity_m_s -= calculate_friction(
-                &p,
-                FRICTION_STATIC_COEFFICIENT,
+            p.x_velocity_m_s += calculate_friction_deceleration(
+                p,
                 FRICTION_DYNAMIC_COEFFICIENT,
             );
-            p.x_velocity_m_s = if p.x_velocity_m_s > 0.0 {
-                p.x_velocity_m_s
-            } else {
-                0.0
-            };
 
             apply_velocity_to_particle_position(p, time_elapsed);
-            clamp_particle_position_to_screen(p, time_elapsed);
+
+            clamp_particle_position_to_screen(p);
         }
         draw_particles(&particles);
 
-        draw_stats(&particles, last_tick_time);
+        draw_stats(&particles);
 
         last_tick_time = now;
 
