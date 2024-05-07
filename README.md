@@ -1,0 +1,1 @@
+This is a personal project - a basic particle simulator written in Rust, using Macroquad. It's WIP, but aims to implement simulation capability for a variety of physical forces for several particles. 
