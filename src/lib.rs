@@ -21,6 +21,8 @@ const BOUNCE_COEFFICIENT: f32 = 0.9;
 
 /* Todo: consider...
 - make friction apply on bounces
+- implement spin, and update bounce logic etc accordingly
+- use signed distance functions or similar to calculate when a particle may be out of bounds
 - bouncing with object compressibility (more complicated)
 - bouncing within a restricted space (bounding object)
 - emitters (e.g. mouse emitter) + lifetimes
@@ -159,24 +161,22 @@ pub fn update_particle_position(
     // If a bounce coefficient is provided, then bounce the particle upon reaching the ground.
     // todo: add bounce interactions between particles
     let p = particle;
-    let multiplier = time_elapsed_seconds as f32;
-    let x_increment = convert_meters_to_pixels(p.y_velocity_m_s * multiplier, PIXELS_PER_METER);
-    let y_increment = convert_meters_to_pixels(p.x_velocity_m_s * multiplier, PIXELS_PER_METER);
-    p.y_pos += x_increment;
-    p.x_pos += y_increment;
-
     if bounce_coefficient <= 0.0001 {
         clamp_particle_position_to_screen(p);
         return;
     }
 
+    let time_multiplier = time_elapsed_seconds as f32;
+    p.y_pos += convert_meters_to_pixels(p.y_velocity_m_s * time_multiplier, PIXELS_PER_METER);
+    p.x_pos += convert_meters_to_pixels(p.x_velocity_m_s * time_multiplier, PIXELS_PER_METER);
+
     let overshoot_left = distance_out_of_bounds(p.x_pos - PARTICLE_RADIUS_PX, 0.0, SCREEN_WIDTH);
     let overshoot_right = distance_out_of_bounds(p.x_pos + PARTICLE_RADIUS_PX, 0.0, SCREEN_WIDTH);
     if overshoot_left > 0.0 {
-        // the fraction of time that was spent overshooting
+        // This is the fraction of time that was spent overshooting
         let fraction = overshoot_left / p.x_velocity_m_s;
         p.x_velocity_m_s = -1.0 * (bounce_coefficient * p.x_velocity_m_s);
-        p.x_pos = p.x_pos + overshoot_left + (overshoot_left * (p.x_velocity_m_s * fraction));
+        p.x_pos = p.x_pos + overshoot_left - (overshoot_left * (p.x_velocity_m_s * fraction));
     } else if overshoot_right > 0.0 {
         let fraction = overshoot_right / p.x_velocity_m_s;
         p.x_velocity_m_s = -1.0 * (bounce_coefficient * p.x_velocity_m_s);
@@ -188,11 +188,10 @@ pub fn update_particle_position(
     if overshoot_top > 0.0 {
         let fraction = overshoot_top / p.y_velocity_m_s;
         p.y_velocity_m_s = -1.0 * (bounce_coefficient * p.y_velocity_m_s);
-        p.y_pos = p.y_pos + overshoot_top + (overshoot_top * (p.y_velocity_m_s * fraction));
+        p.y_pos = p.y_pos + overshoot_top - (overshoot_top * (p.y_velocity_m_s * fraction));
     } else if overshoot_bot > 0.0 {
         let fraction = overshoot_bot / p.y_velocity_m_s;
         p.y_velocity_m_s = -1.0 * (bounce_coefficient * p.y_velocity_m_s);
-        // right hand side is a negative value, that's why we add it
         p.y_pos = p.y_pos - overshoot_bot + (overshoot_bot * (p.y_velocity_m_s * fraction));
     }
 }
@@ -274,7 +273,7 @@ pub async fn p_main() {
         x_pos: SCREEN_WIDTH / 2.0,
         y_pos: PARTICLE_RADIUS_PX,
         x_velocity_m_s: 10.0,
-        y_velocity_m_s: 0.0,
+        y_velocity_m_s: 2000.0,
     });
     let mut last_tick_time = get_time();
 
