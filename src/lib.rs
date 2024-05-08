@@ -16,13 +16,12 @@ const PARTICLE_COLOR: Color = RED;
 const PIXELS_PER_METER: f32 = 10.0;
 const GRAVITY_MS: f32 = 9.8;
 // const FRICTION_STATIC_COEFFICIENT: f32 = 0.02;
-const FRICTION_DYNAMIC_COEFFICIENT: f32 = 0.01;
+const FRICTION_DYNAMIC_COEFFICIENT: f32 = 0.005;
+const BOUNCE_COEFFICIENT: f32 = 0.9;
 
 /* Todo: consider...
-- friction
-- separate pure from impure code (e.g. determine new values in pure functions and assign in impure functions)
-- add tests
-- bouncing
+- make friction apply on bounces
+- bouncing with object compressibility (more complicated)
 - bouncing within a restricted space (bounding object)
 - emitters (e.g. mouse emitter) + lifetimes
 - collision with other particles / momentum transfer
@@ -67,22 +66,6 @@ pub fn convert_meters_to_pixels(meters: f32, pixels_per_meter: f32) -> f32 {
 
 pub fn convert_pixels_to_meters(pixels: f32, pixels_per_meter: f32) -> f32 {
     return pixels / pixels_per_meter;
-}
-
-pub fn convert_velocity_to_newtons(
-    old_velocity: f32,
-    new_velocity: f32,
-    time_elapsed_seconds: f32,
-) -> f32 {
-    // Given the velocity of an object in a given axis, return that velocity expressed in unsigned Newtons.
-    // TODO: don't forget to encode direction or something
-    // !! TODO: confirm that this will not return NEGATIVE Newtons when decelerating !!
-
-    let acceleration =
-        calculate_particle_acceleration(new_velocity, old_velocity, time_elapsed_seconds);
-    // newtons, KG, m/s^2
-    let newton_result = PARTICLE_MASS_KG * acceleration;
-    return newton_result;
 }
 
 pub fn calculate_particle_acceleration(
@@ -148,12 +131,70 @@ pub fn calculate_friction_deceleration(
     return friction_deceleration;
 }
 
-pub fn apply_velocity_to_particle_position(particle: &mut Particle, time_elapsed_seconds: f64) {
+pub fn calculate_gravity_effect_on_velocity(
+    gravity_acceleration_ms: f32,
+    time_elapsed_seconds: f64,
+) -> f32 {
+    // Calculate the effect of gravity in meters over the elapsed timeframe.
+    return gravity_acceleration_ms * time_elapsed_seconds as f32;
+}
+
+fn distance_out_of_bounds(pixel_location: f32, axis_min_val: f32, axis_max_val: f32) -> f32 {
+    // Return the unsigned distance out of bounds on a given axis that a pixel is
+    // A negative value means the pixel is out of bounds on the left, a positive, on the right.
+    if pixel_location < axis_min_val {
+        return axis_min_val - pixel_location;
+    } else if pixel_location > axis_max_val {
+        return pixel_location - axis_max_val;
+    }
+    return 0.0;
+}
+
+pub fn update_particle_position(
+    particle: &mut Particle,
+    time_elapsed_seconds: f64,
+    bounce_coefficient: f32,
+) {
     // Using the particle's velocity, update its pixel position, while respecting the ratio of pixels per meter.
+    // If a bounce coefficient is provided, then bounce the particle upon reaching the ground.
+    // todo: add bounce interactions between particles
     let p = particle;
     let multiplier = time_elapsed_seconds as f32;
-    p.y_pos += convert_meters_to_pixels(p.y_velocity_m_s * multiplier, PIXELS_PER_METER);
-    p.x_pos += convert_meters_to_pixels(p.x_velocity_m_s * multiplier, PIXELS_PER_METER);
+    let x_increment = convert_meters_to_pixels(p.y_velocity_m_s * multiplier, PIXELS_PER_METER);
+    let y_increment = convert_meters_to_pixels(p.x_velocity_m_s * multiplier, PIXELS_PER_METER);
+    p.y_pos += x_increment;
+    p.x_pos += y_increment;
+
+    if bounce_coefficient <= 0.0001 {
+        clamp_particle_position_to_screen(p);
+        return;
+    }
+
+    let overshoot_left = distance_out_of_bounds(p.x_pos - PARTICLE_RADIUS_PX, 0.0, SCREEN_WIDTH);
+    let overshoot_right = distance_out_of_bounds(p.x_pos + PARTICLE_RADIUS_PX, 0.0, SCREEN_WIDTH);
+    if overshoot_left > 0.0 {
+        // the fraction of time that was spent overshooting
+        let fraction = overshoot_left / p.x_velocity_m_s;
+        p.x_velocity_m_s = -1.0 * (bounce_coefficient * p.x_velocity_m_s);
+        p.x_pos = p.x_pos + overshoot_left + (overshoot_left * (p.x_velocity_m_s * fraction));
+    } else if overshoot_right > 0.0 {
+        let fraction = overshoot_right / p.x_velocity_m_s;
+        p.x_velocity_m_s = -1.0 * (bounce_coefficient * p.x_velocity_m_s);
+        p.x_pos = p.x_pos - overshoot_right + (overshoot_right * (p.x_velocity_m_s * fraction));
+    }
+
+    let overshoot_top = distance_out_of_bounds(p.y_pos - PARTICLE_RADIUS_PX, 0.0, SCREEN_HEIGHT);
+    let overshoot_bot = distance_out_of_bounds(p.y_pos + PARTICLE_RADIUS_PX, 0.0, SCREEN_HEIGHT);
+    if overshoot_top > 0.0 {
+        let fraction = overshoot_top / p.y_velocity_m_s;
+        p.y_velocity_m_s = -1.0 * (bounce_coefficient * p.y_velocity_m_s);
+        p.y_pos = p.y_pos + overshoot_top + (overshoot_top * (p.y_velocity_m_s * fraction));
+    } else if overshoot_bot > 0.0 {
+        let fraction = overshoot_bot / p.y_velocity_m_s;
+        p.y_velocity_m_s = -1.0 * (bounce_coefficient * p.y_velocity_m_s);
+        // right hand side is a negative value, that's why we add it
+        p.y_pos = p.y_pos - overshoot_bot + (overshoot_bot * (p.y_velocity_m_s * fraction));
+    }
 }
 
 pub fn clamp_particle_position_to_screen(particle: &mut Particle) {
@@ -174,14 +215,6 @@ pub fn clamp_particle_position_to_screen(particle: &mut Particle) {
         p.x_pos = PARTICLE_RADIUS_PX;
         p.x_velocity_m_s = 0.0;
     }
-}
-
-pub fn calculate_gravity_effect_on_velocity(
-    gravity_acceleration_ms: f32,
-    time_elapsed_seconds: f64,
-) -> f32 {
-    // Calculate the effect of gravity in meters over the elapsed timeframe.
-    return gravity_acceleration_ms * time_elapsed_seconds as f32;
 }
 
 pub fn draw_stats(particles: &Vec<Particle>) {
@@ -234,15 +267,25 @@ pub fn draw_stats(particles: &Vec<Particle>) {
 
 pub async fn p_main() {
     // Setup
+
     request_new_screen_size(SCREEN_WIDTH, SCREEN_HEIGHT);
     let mut particles: Vec<Particle> = Vec::new();
     particles.push(Particle {
         x_pos: SCREEN_WIDTH / 2.0,
-        y_pos: 5.0,
+        y_pos: PARTICLE_RADIUS_PX,
         x_velocity_m_s: 10.0,
         y_velocity_m_s: 0.0,
     });
     let mut last_tick_time = get_time();
+
+    // Constraint checks: check for any unsupported parameter values that aren't immediately ridiculous.
+    // A negative bounce coefficient makes no sense. Either an object bounces (val >=0) or doesn't (val == 0)
+    assert!(BOUNCE_COEFFICIENT >= 0.0);
+    // The particle needs to spawn fully within simulation bounds
+    assert!(particles[0].x_pos >= PARTICLE_RADIUS_PX);
+    assert!(particles[0].y_pos >= PARTICLE_RADIUS_PX);
+    assert!(particles[0].x_pos <= SCREEN_WIDTH - PARTICLE_RADIUS_PX);
+    assert!(particles[0].y_pos <= SCREEN_HEIGHT - PARTICLE_RADIUS_PX);
 
     // Main loop
     loop {
@@ -253,14 +296,9 @@ pub async fn p_main() {
         for p in particles.iter_mut() {
             p.y_velocity_m_s += calculate_gravity_effect_on_velocity(GRAVITY_MS, time_elapsed);
 
-            p.x_velocity_m_s += calculate_friction_deceleration(
-                p,
-                FRICTION_DYNAMIC_COEFFICIENT,
-            );
+            p.x_velocity_m_s += calculate_friction_deceleration(p, FRICTION_DYNAMIC_COEFFICIENT);
 
-            apply_velocity_to_particle_position(p, time_elapsed);
-
-            clamp_particle_position_to_screen(p);
+            update_particle_position(p, time_elapsed, BOUNCE_COEFFICIENT);
         }
         draw_particles(&particles);
 

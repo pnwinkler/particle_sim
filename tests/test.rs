@@ -118,10 +118,25 @@ mod tests {
 
     #[test]
     fn test_apply_gravity_to_particles() {
-        let result = particle_sim::calculate_gravity_effect_on_velocity(9.8,1.0);
+        let result = particle_sim::calculate_gravity_effect_on_velocity(9.8, 1.0);
         assert_eq!(result, 9.8);
 
-        let result = particle_sim::calculate_gravity_effect_on_velocity(9.8,2.0);
+        let result = particle_sim::calculate_gravity_effect_on_velocity(9.8, 2.0);
         assert_eq!(result, 19.6);
     }
+
+    // Test commented out for now. Handling objects outside of simulation window bounds is currently out of scope.
+    // #[test]
+    // fn test_update_particle_position() {
+    //     // If spawned too high, a particle should not bounce off the top of the simulation
+    //     // and out of the window
+    //     let mut particle = Particle {
+    //         x_pos: 0.0,
+    //         y_pos: -1.0,
+    //         x_velocity_m_s: 0.0,
+    //         y_velocity_m_s: 2.0,
+    //     };
+    //     let result = particle_sim::update_particle_position(&mut particle, 1.0, 0.99);
+    //     assert!(particle.y_pos <= 0.0);
+    // }
 }
