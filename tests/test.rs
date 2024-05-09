@@ -125,6 +125,24 @@ mod tests {
         assert_eq!(result, 19.6);
     }
 
+    #[test]
+    fn test_update_particle_position() {
+        // Bounces should reverse the direction of a particle, and its direction of travel
+        let mut particle = Particle {
+            x_pos: 0.0,
+            y_pos: 0.5 * SCREEN_HEIGHT, // arbitrarily chosen, but we want the particle not already colliding on spawn
+            x_velocity_m_s: 0.0,
+            y_velocity_m_s: -0.5 * SCREEN_HEIGHT + 1.0, // we want the ball to hit the ground within 1 tick
+        };
+        let result = particle_sim::update_particle_position(&mut particle, 1.0, 0.99);
+        assert!(particle.y_pos >= 0.0);
+        assert!(particle.y_velocity_m_s >= 0.0);
+        assert!(particle.y_velocity_m_s.abs() < (-0.5 * SCREEN_HEIGHT + 1.0).abs());
+
+        // todo: add tests for ultra-high frequency bounces (e.g. more than once per frame)
+        // todo: add tests for >= 2 particles bouncing into each other at once
+        // todo: add tests for cascading bounces? Where one bounce triggers other bounces, potentially of already bounced particles
+    }
     // Test commented out for now. Handling objects outside of simulation window bounds is currently out of scope.
     // #[test]
     // fn test_update_particle_position() {
