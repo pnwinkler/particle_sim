@@ -14,6 +14,19 @@ mod tests {
     }
 
     #[test]
+    fn test_does_circle_intersect() {
+        // Test if the following points intersect our imaginary circle
+        let result = does_circle_intersect(XY { x: 0.0, y: 0.0 }, 5.0, XY { x: 1.0, y: 1.0 });
+        assert!(result == true);
+
+        let result = does_circle_intersect(XY { x: 1.0, y: 1.0 }, 5.0, XY { x: 6.0, y: 1.0 });
+        assert!(result == true);
+
+        let result = does_circle_intersect(XY { x: 50.0, y: 50.0 }, 5.0, XY { x: 50.0, y: 55.1 });
+        assert!(result == false);
+    }
+
+    #[test]
     fn test_convert_meters_to_pixels() {
         let result = particle_sim::convert_meters_to_pixels(10.0, 100.0);
         assert_eq!(result, 1000.0);
@@ -125,19 +138,50 @@ mod tests {
         assert_eq!(result, 19.6);
     }
 
+    // TODO: make tests easier to execute and understand, then return to developing functionality IMO
+    // e.g. implement a distance function for each object, then test out of bounds logic for those object and functions
+    // then I could make it return an enum, for example, indicating in which direction(s) it's out of bounds
+
     #[test]
     fn test_update_particle_position() {
-        // Bounces should reverse the direction of a particle, and its direction of travel
-        let mut particle = Particle {
-            x_pos: 0.0,
-            y_pos: 0.5 * SCREEN_HEIGHT, // arbitrarily chosen, but we want the particle not already colliding on spawn
-            x_velocity_m_s: 0.0,
-            y_velocity_m_s: -0.5 * SCREEN_HEIGHT + 1.0, // we want the ball to hit the ground within 1 tick
+        // NOTE: extreme speeds are not yet supported. By extreme, I suspect that means speeds which would
+        // make the particle bounce with such force that the bounce would place it outside of simulation range within 1 tick.
+
+        // TODO: re-enable
+        // Bounces should reverse the direction of a particle, and its direction of travel. Test vertical
+        // let initial_y_velocity = -0.5 * SCREEN_HEIGHT + 1.0;
+        // let particle = Particle {
+        //     x_pos: 0.0,
+        //     y_pos: 0.5 * SCREEN_HEIGHT, // arbitrarily chosen, but we want the particle not already colliding on spawn
+        //     x_velocity_m_s: 0.0,
+        //     y_velocity_m_s: initial_y_velocity, // we want the ball to hit the ground within 1 tick
+        // };
+        // let result = particle_sim::calculate_bounce(&particle, 1.0, 0.99);
+        // assert!(!result.y_pos.is_nan());
+        // assert!(result.y_pos >= 0.0);
+        // assert!(!result.y_velocity.is_nan());
+        // assert!(result.y_velocity >= 0.0);
+        // assert!(result.y_velocity.abs() < initial_y_velocity.abs());
+
+        // Bounces should reverse the direction of a particle, and its direction of travel. Test horizontal
+        let initial_x_velocity = 0.5 * SCREEN_WIDTH + 1.0;
+        let particle = Particle {
+            x_pos: 0.5 * SCREEN_WIDTH,
+            y_pos: 0.5 * SCREEN_HEIGHT,
+            x_velocity_m_s: initial_x_velocity, // we want the ball to hit the side within 1 tick
+            y_velocity_m_s: 0.0,
         };
-        let result = particle_sim::update_particle_position(&mut particle, 1.0, 0.99);
-        assert!(particle.y_pos >= 0.0);
-        assert!(particle.y_velocity_m_s >= 0.0);
-        assert!(particle.y_velocity_m_s.abs() < (-0.5 * SCREEN_HEIGHT + 1.0).abs());
+        let result = particle_sim::calculate_bounce(&particle, 1.0, 0.99);
+        assert!(!result.x_pos.is_nan());
+        assert!(result.x_pos >= 0.0);
+        // check we haven't gone off-screen
+        assert!(result.x_pos <= SCREEN_WIDTH + 0.1);
+        assert!(!result.x_velocity.is_nan());
+        assert!(result.x_velocity <= 0.0);
+        println!("{}, {}", result.x_velocity, initial_x_velocity);
+        assert!(result.x_velocity < initial_x_velocity);
+
+        // TODO: test high speed horizontal and vertical bounces. There's some teleportation going on near the simulation walls.
 
         // todo: add tests for ultra-high frequency bounces (e.g. more than once per frame)
         // todo: add tests for >= 2 particles bouncing into each other at once

@@ -20,6 +20,7 @@ const FRICTION_DYNAMIC_COEFFICIENT: f32 = 0.005;
 const BOUNCE_COEFFICIENT: f32 = 0.9;
 
 /* Todo: consider...
+- fix bouncing
 - make friction apply on bounces
 - implement spin, and update bounce logic etc accordingly
 - use signed distance functions or similar to calculate when a particle may be out of bounds
@@ -47,8 +48,23 @@ pub struct Particle {
     // Signed particle velocity in meters per second
     pub x_velocity_m_s: f32,
     pub y_velocity_m_s: f32,
-    // Particle lifetime in milliseconds
-    // lifetime_ms: u16,
+}
+
+pub struct XY {
+    pub x: f32,
+    pub y: f32,
+}
+
+pub fn does_circle_intersect(circle_center: XY, circle_radius: f32, point: XY) -> bool {
+    // Returns true if the point falls within a circle, else false
+    // a^2 + b^2 = c^2. If c <= radius, then the point is within the circle
+
+    // tolerance is to account for floating point imprecision
+    let tolerance = 0.0001;
+    let a_2 = (circle_center.x - point.x).powf(2.0);
+    let b_2 = (circle_center.y - point.y).powf(2.0);
+    println!("{},{},{}", a_2, b_2, circle_radius.powf(2.0));
+    return (circle_radius.powf(2.0) + tolerance) >= (a_2 + b_2);
 }
 
 pub fn draw_particles(particles: &Vec<Particle>) {
@@ -152,73 +168,133 @@ fn distance_out_of_bounds(pixel_location: f32, axis_min_val: f32, axis_max_val: 
     return 0.0;
 }
 
-pub fn update_particle_position(
-    particle: &mut Particle,
-    time_elapsed_seconds: f64,
-    bounce_coefficient: f32,
-) {
-    // Using the particle's velocity, update its pixel position, while respecting the ratio of pixels per meter.
-    // If a bounce coefficient is provided, then bounce the particle upon reaching the ground.
-    // todo: add bounce interactions between particles
-    let p = particle;
-    if bounce_coefficient <= 0.0001 {
-        clamp_particle_position_to_screen(p);
-        return;
-    }
-
-    let time_multiplier = time_elapsed_seconds as f32;
-    p.y_pos += convert_meters_to_pixels(p.y_velocity_m_s * time_multiplier, PIXELS_PER_METER);
-    p.x_pos += convert_meters_to_pixels(p.x_velocity_m_s * time_multiplier, PIXELS_PER_METER);
-
-    let overshoot_left = distance_out_of_bounds(p.x_pos - PARTICLE_RADIUS_PX, 0.0, SCREEN_WIDTH);
-    let overshoot_right = distance_out_of_bounds(p.x_pos + PARTICLE_RADIUS_PX, 0.0, SCREEN_WIDTH);
-    if overshoot_left > 0.0 {
-        // This is the fraction of time that was spent overshooting
-        let fraction = overshoot_left / p.x_velocity_m_s;
-        p.x_velocity_m_s = -1.0 * (bounce_coefficient * p.x_velocity_m_s);
-        p.x_pos = p.x_pos + overshoot_left - (overshoot_left * (p.x_velocity_m_s * fraction));
-    } else if overshoot_right > 0.0 {
-        let fraction = overshoot_right / p.x_velocity_m_s;
-        p.x_velocity_m_s = -1.0 * (bounce_coefficient * p.x_velocity_m_s);
-        p.x_pos = p.x_pos - overshoot_right + (overshoot_right * (p.x_velocity_m_s * fraction));
-    }
-
-    let overshoot_top = distance_out_of_bounds(p.y_pos - PARTICLE_RADIUS_PX, 0.0, SCREEN_HEIGHT);
-    let overshoot_bot = distance_out_of_bounds(p.y_pos + PARTICLE_RADIUS_PX, 0.0, SCREEN_HEIGHT);
-    if overshoot_top > 0.0 {
-        let fraction = overshoot_top / p.y_velocity_m_s;
-        p.y_velocity_m_s = -1.0 * (bounce_coefficient * p.y_velocity_m_s);
-        p.y_pos = p.y_pos + overshoot_top - (overshoot_top * (p.y_velocity_m_s * fraction));
-    } else if overshoot_bot > 0.0 {
-        let fraction = overshoot_bot / p.y_velocity_m_s;
-        p.y_velocity_m_s = -1.0 * (bounce_coefficient * p.y_velocity_m_s);
-        p.y_pos = p.y_pos - overshoot_bot + (overshoot_bot * (p.y_velocity_m_s * fraction));
-    }
+pub struct BounceResult {
+    pub x_pos: f32,
+    pub y_pos: f32,
+    pub x_velocity: f32,
+    pub y_velocity: f32,
 }
 
-pub fn clamp_particle_position_to_screen(particle: &mut Particle) {
-    // If the particle would be off-screen, move it back on-screen and set its velocity in that axis to zero.
+pub fn calculate_bounce(
+    particle: &Particle,
+    time_elapsed_seconds: f64,
+    bounce_coefficient: f32,
+) -> BounceResult {
+    // If a bounce coefficient is provided, then bounce the particle upon reaching the ground.
+    // todo: add bounce interactions between particles
+
     let p = particle;
+    let mut result = BounceResult {
+        x_pos: p.x_pos,
+        y_pos: p.y_pos,
+        x_velocity: p.x_velocity_m_s,
+        y_velocity: p.y_velocity_m_s,
+    };
+
+    if bounce_coefficient <= 0.0001 {
+        // clamp_particle_position_to_screen(p, true);
+        return result;
+    }
+
+    // Using the particle's velocity, update its pixel position, while respecting the ratio of pixels per meter.
+    let time_multiplier = time_elapsed_seconds as f32;
+    result.y_pos += convert_meters_to_pixels(p.y_velocity_m_s * time_multiplier, PIXELS_PER_METER);
+    result.x_pos += convert_meters_to_pixels(p.x_velocity_m_s * time_multiplier, PIXELS_PER_METER);
+
+    // Implementation quirk: both of these overshoots can simultaneously be > 0
+    let overshoot_left = distance_out_of_bounds(p.x_pos - PARTICLE_RADIUS_PX, 0.0, SCREEN_WIDTH);
+    let overshoot_right = distance_out_of_bounds(p.x_pos + PARTICLE_RADIUS_PX, 0.0, SCREEN_WIDTH);
+    // TODO: handle massive overshoots, e.g. out to 5950
+    println!("{}, {}", overshoot_left, result.x_pos);
+    if overshoot_left > 0.0 && p.x_velocity_m_s < 0.0 {
+        // This is the fraction of time that was spent overshooting
+        println!("BOUNCE LEFT");
+        let fraction = overshoot_left / p.x_velocity_m_s;
+        result.x_velocity = -1.0 * (bounce_coefficient * result.x_velocity);
+        result.x_pos =
+            result.x_pos + overshoot_left - (overshoot_left * (result.x_velocity * fraction));
+    } else if overshoot_right > 0.0 && p.x_velocity_m_s > 0.0 {
+        println!("BOUNCE RIGHT");
+        let fraction = overshoot_right / p.x_velocity_m_s;
+        result.x_velocity = -1.0 * (bounce_coefficient * result.x_velocity);
+        result.x_pos =
+            result.x_pos - overshoot_right + (overshoot_right * (result.x_velocity * fraction));
+    }
+
+    let overshoot_top =
+        distance_out_of_bounds(result.y_pos - PARTICLE_RADIUS_PX, 0.0, SCREEN_HEIGHT);
+    let overshoot_bot =
+        distance_out_of_bounds(result.y_pos + PARTICLE_RADIUS_PX, 0.0, SCREEN_HEIGHT);
+    if overshoot_top > 0.0 && p.y_velocity_m_s < 0.0 {
+        println!("BOUNCE TOP");
+        let fraction = overshoot_top / result.y_velocity;
+        result.y_velocity = -1.0 * (bounce_coefficient * result.y_velocity);
+        result.y_pos =
+            result.y_pos + overshoot_top - (overshoot_top * (result.y_velocity * fraction));
+    } else if overshoot_bot > 0.0 && p.y_velocity_m_s > 0.0 {
+        println!("BOUNCE BOT");
+        let fraction = overshoot_bot / result.y_velocity;
+        result.y_velocity = -1.0 * (bounce_coefficient * result.y_velocity);
+        result.y_pos =
+            result.y_pos - overshoot_bot + (overshoot_bot * (result.y_velocity * fraction));
+    }
+
+    // DEBUG code
+    // print!(
+    //     "{},{},{},{} VERSUS ",
+    //     p.x_pos, p.y_pos, p.x_velocity_m_s, p.y_velocity_m_s
+    // );
+    // println!(
+    //     "{},{},{},{}",
+    //     result.x_pos, result.y_pos, result.x_velocity, result.y_velocity
+    // );
+    return result;
+}
+
+pub fn update_particle_position(
+    particle: &mut Particle,
+    new_x_pos: f32,
+    new_y_pos: f32,
+    new_x_velocity: f32,
+    new_y_velocity: f32,
+) {
+    particle.x_pos = new_x_pos;
+    particle.y_pos = new_y_pos;
+    particle.x_velocity_m_s = new_x_velocity;
+    particle.y_velocity_m_s = new_y_velocity;
+}
+
+pub fn clamp_particle_position_to_screen(particle: &mut Particle, reset_velocity: bool) {
+    // If the particle would be off-screen, move it back on-screen. If reset_velocity, then set its velocity in that axis to zero.
+    let p = particle;
+    let mut new_y_velocity = p.y_velocity_m_s;
+    let mut new_x_velocity = p.x_velocity_m_s;
+    if reset_velocity {
+        new_y_velocity = 0.0;
+        new_x_velocity = 0.0;
+    }
+
     if SCREEN_HEIGHT < (p.y_pos + PARTICLE_RADIUS_PX) {
-        p.y_pos = SCREEN_HEIGHT - PARTICLE_RADIUS_PX;
-        p.y_velocity_m_s = 0.0;
+        p.y_pos = SCREEN_HEIGHT - PARTICLE_RADIUS_PX - 1.0;
+        p.y_velocity_m_s = new_y_velocity;
     } else if 0.0 > (p.y_pos - PARTICLE_RADIUS_PX) {
-        p.y_pos = 2.0 * PARTICLE_RADIUS_PX;
-        p.y_velocity_m_s = 0.0;
+        p.y_pos = PARTICLE_RADIUS_PX + 1.0;
+        p.y_velocity_m_s = new_y_velocity;
     }
 
     if SCREEN_WIDTH < (p.x_pos + PARTICLE_RADIUS_PX) {
-        p.x_pos = SCREEN_WIDTH - PARTICLE_RADIUS_PX;
-        p.x_velocity_m_s = 0.0;
+        p.x_pos = SCREEN_WIDTH - (PARTICLE_RADIUS_PX + 1.0);
+        p.x_velocity_m_s = new_x_velocity;
     } else if 0.0 > (p.x_pos - PARTICLE_RADIUS_PX) {
-        p.x_pos = PARTICLE_RADIUS_PX;
-        p.x_velocity_m_s = 0.0;
+        // p.x_pos = PARTICLE_RADIUS_PX + 1.0;
+        // p.x_velocity_m_s = new_x_velocity;
     }
 }
 
 pub fn draw_stats(particles: &Vec<Particle>) {
     // Draw stats to screen
 
+    // todo: fix sum_y_positions so that it doesn't overflow or nan or whatever with 1000 particles
     let mut sum_y_velocity = 0.0;
     let mut sum_x_velocity = 0.0;
     let mut sum_y_positions = 0.0;
@@ -242,6 +318,11 @@ pub fn draw_stats(particles: &Vec<Particle>) {
         convert_pixels_to_meters(particle_mean_altitude_px, PIXELS_PER_METER);
     let particle_mean_altitude_str =
         "Mean altitude (m): ".to_owned() + &particle_mean_altitude_meters.to_string();
+
+    // println!(
+    //     "{},{},{}",
+    //     sum_y_positions, particle_mean_altitude_px, particle_mean_altitude_meters
+    // );
 
     let strings: [&String; 6] = [
         &get_fps().to_string(),
@@ -267,17 +348,32 @@ pub fn draw_stats(particles: &Vec<Particle>) {
 pub async fn p_main() {
     // Setup
 
+    // Note that very fast speeds (in the range of >= 200 m/s) may, for now, lead to erratic behavior.
+    // Note also, that alt-tabbing or otherwise removing focus from the window may affect simulation results
+    //  (my guess is this is due to the OS / graphics driver or something reducing the framerate of unfocused windows)
+
     request_new_screen_size(SCREEN_WIDTH, SCREEN_HEIGHT);
     let mut particles: Vec<Particle> = Vec::new();
     particles.push(Particle {
-        x_pos: SCREEN_WIDTH / 2.0,
-        y_pos: PARTICLE_RADIUS_PX,
-        x_velocity_m_s: 10.0,
-        y_velocity_m_s: 2000.0,
+        x_pos: 0.5 * SCREEN_WIDTH,
+        y_pos: 0.5 * SCREEN_HEIGHT,
+        x_velocity_m_s: 0.5 * SCREEN_WIDTH + 1.0,
+        y_velocity_m_s: 0.0,
     });
+
+    // As of 2024-05-09, 2550 is my maximum number of particles for constant >= 140 FPS
+    // for x in 1..2550 {
+    //     particles.push(Particle {
+    //         x_pos: PARTICLE_RADIUS_PX + (x * 1) as f32,
+    //         y_pos: PARTICLE_RADIUS_PX +  (x * 1) as f32,
+    //         x_velocity_m_s: 250.0,
+    //         y_velocity_m_s: 250.0,
+    //     });
+    // }
+
     let mut last_tick_time = get_time();
 
-    // Constraint checks: check for any unsupported parameter values that aren't immediately ridiculous.
+    // Constraint checks: check for any unsupported parameter values that aren't obviously ridiculous.
     // A negative bounce coefficient makes no sense. Either an object bounces (val >=0) or doesn't (val == 0)
     assert!(BOUNCE_COEFFICIENT >= 0.0);
     // The particle needs to spawn fully within simulation bounds
@@ -293,11 +389,24 @@ pub async fn p_main() {
         clear_background(BLACK);
 
         for p in particles.iter_mut() {
+            print!("BEFORE: {} pos\t{} vel\t", p.x_pos, p.x_velocity_m_s);
             p.y_velocity_m_s += calculate_gravity_effect_on_velocity(GRAVITY_MS, time_elapsed);
 
             p.x_velocity_m_s += calculate_friction_deceleration(p, FRICTION_DYNAMIC_COEFFICIENT);
 
-            update_particle_position(p, time_elapsed, BOUNCE_COEFFICIENT);
+            let bounce_result = calculate_bounce(p, time_elapsed, BOUNCE_COEFFICIENT);
+
+            update_particle_position(
+                p,
+                bounce_result.x_pos,
+                bounce_result.y_pos,
+                bounce_result.x_velocity,
+                bounce_result.y_velocity,
+            );
+
+            // todo: resolve why this function clamps particles to the left or right hand side of the screen
+            // clamp_particle_position_to_screen(p, false);
+            println!("AFTER: {} pos\t{} vel", p.x_pos, p.x_velocity_m_s);
         }
         draw_particles(&particles);
 
