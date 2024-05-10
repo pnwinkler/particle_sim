@@ -356,8 +356,8 @@ pub async fn p_main() {
     let mut particles: Vec<Particle> = Vec::new();
     particles.push(Particle {
         x_pos: 0.5 * SCREEN_WIDTH,
-        y_pos: 0.5 * SCREEN_HEIGHT,
-        x_velocity_m_s: 0.5 * SCREEN_WIDTH + 1.0,
+        y_pos: PARTICLE_RADIUS_PX,
+        x_velocity_m_s: 50.0,
         y_velocity_m_s: 0.0,
     });
 
