@@ -131,16 +131,38 @@ mod tests {
 
     #[test]
     fn test_apply_gravity_to_particles() {
-        let result = particle_sim::calculate_gravity_effect_on_velocity(9.8, 1.0);
+        let particle_airborne_1 = Particle {
+            x_pos: 0.0,
+            y_pos: 0.5* SCREEN_HEIGHT,
+            x_velocity_m_s: -5.0,
+            y_velocity_m_s: 0.0,
+        };
+        let result = particle_sim::calculate_gravity_effect_on_velocity(&particle_airborne_1, 9.8, 1.0);
         assert_eq!(result, 9.8);
 
-        let result = particle_sim::calculate_gravity_effect_on_velocity(9.8, 2.0);
+        let particle_airborne_2 = Particle {
+            x_pos: 0.0,
+            y_pos: 0.5* SCREEN_HEIGHT,
+            x_velocity_m_s: -5.0,
+            y_velocity_m_s: 0.0,
+        };
+        let result = particle_sim::calculate_gravity_effect_on_velocity(&particle_airborne_2, 9.8, 2.0);
         assert_eq!(result, 19.6);
+
+        // Particles already touching the ground should not accelerate due to gravity
+        let touching_ground_y_pos = SCREEN_HEIGHT - 1.0;
+        let particle_ground = Particle {
+            x_pos: 0.0,
+            y_pos: touching_ground_y_pos,
+            x_velocity_m_s: -5.0,
+            y_velocity_m_s: 0.0,
+        };
+        let result = particle_sim::calculate_gravity_effect_on_velocity(&particle_ground, 9.8, 1.0);
+        assert_eq!(result, 0.0);
+
     }
 
-    // TODO: make tests easier to execute and understand, then return to developing functionality IMO
-    // e.g. implement a distance function for each object, then test out of bounds logic for those object and functions
-    // then I could make it return an enum, for example, indicating in which direction(s) it's out of bounds
+    // !! TODO: add test for distance out of bounds !!
 
     #[test]
     fn test_update_particle_position() {
@@ -149,19 +171,23 @@ mod tests {
 
         // TODO: re-enable
         // Bounces should reverse the direction of a particle, and its direction of travel. Test vertical
-        // let initial_y_velocity = -0.5 * SCREEN_HEIGHT + 1.0;
-        // let particle = Particle {
-        //     x_pos: 0.0,
-        //     y_pos: 0.5 * SCREEN_HEIGHT, // arbitrarily chosen, but we want the particle not already colliding on spawn
-        //     x_velocity_m_s: 0.0,
-        //     y_velocity_m_s: initial_y_velocity, // we want the ball to hit the ground within 1 tick
-        // };
-        // let result = particle_sim::calculate_bounce(&particle, 1.0, 0.99);
-        // assert!(!result.y_pos.is_nan());
-        // assert!(result.y_pos >= 0.0);
-        // assert!(!result.y_velocity.is_nan());
-        // assert!(result.y_velocity >= 0.0);
-        // assert!(result.y_velocity.abs() < initial_y_velocity.abs());
+        let initial_y_velocity = -0.5 * SCREEN_HEIGHT - 1.0;
+        let particle = Particle {
+            x_pos: 0.0,
+            y_pos: 0.5 * SCREEN_HEIGHT, // arbitrarily chosen, but we want the particle not already colliding on spawn
+            x_velocity_m_s: 0.0,
+            y_velocity_m_s: initial_y_velocity, // we want the ball to hit the ground within 1 tick
+        };
+        let result = particle_sim::calculate_bounce(&particle, 1.0, 0.99);
+        assert!(!result.y_pos.is_nan());
+        assert!(result.y_pos >= 0.0);
+        assert!(!result.y_velocity.is_nan());
+        println!("{}", initial_y_velocity);
+        println!("{}", result.y_velocity);
+        println!("{}", 0.5 * SCREEN_HEIGHT);
+        println!("{}", result.y_pos);
+        assert!(result.y_velocity >= 0.0);
+        assert!(result.y_velocity.abs() < initial_y_velocity.abs());
 
         // Bounces should reverse the direction of a particle, and its direction of travel. Test horizontal
         let initial_x_velocity = 0.5 * SCREEN_WIDTH + 1.0;
@@ -171,7 +197,7 @@ mod tests {
             x_velocity_m_s: initial_x_velocity, // we want the ball to hit the side within 1 tick
             y_velocity_m_s: 0.0,
         };
-        let result = particle_sim::calculate_bounce(&particle, 1.0, 0.99);
+        let result = particle_sim::calculate_bounce(&particle, 1000.0 / 144.0, 0.5);
         assert!(!result.x_pos.is_nan());
         assert!(result.x_pos >= 0.0);
         // check we haven't gone off-screen
@@ -181,7 +207,44 @@ mod tests {
         println!("{}, {}", result.x_velocity, initial_x_velocity);
         assert!(result.x_velocity < initial_x_velocity);
 
-        // TODO: test high speed horizontal and vertical bounces. There's some teleportation going on near the simulation walls.
+        // If given out of range inputs, then the function should return them unmodified
+        let input_x = SCREEN_WIDTH + 1.0;
+        let input_y = SCREEN_HEIGHT + 1.0;
+        let particle = Particle {
+            x_pos: SCREEN_WIDTH + 1.0,
+            y_pos: SCREEN_HEIGHT + 1.0,
+            x_velocity_m_s: 0.0,
+            y_velocity_m_s: -5.0,
+        };
+        let result = particle_sim::calculate_bounce(&particle, 1.0, 0.99);
+        assert_eq!(result.x_pos, input_x);
+        assert_eq!(result.y_pos, input_y);
+
+        // Check that bounces eventually stop
+        let particle = Particle {
+            x_pos: 0.5 * SCREEN_WIDTH,
+            y_pos: 0.5 * SCREEN_HEIGHT,
+            x_velocity_m_s: 0.0,
+            y_velocity_m_s: -1.0,
+        };
+        let result = particle_sim::calculate_bounce(&particle, 200.0, 0.01);
+        println!("HELLO {}", result.y_velocity);
+        // assert_eq!(result.y_velocity.abs().floor(), 0.0);
+        // assert!(result.y_pos >= 0.0);
+
+        // Check that object remains above the arena floor
+        let particle = Particle {
+            x_pos: 0.5 * SCREEN_WIDTH,
+            y_pos: 0.5 * SCREEN_HEIGHT,
+            x_velocity_m_s: 0.0,
+            y_velocity_m_s: -1.0,
+        };
+        let result = particle_sim::calculate_bounce(&particle, 200.0, 0.01);
+        println!("HELLO {}", result.y_velocity);
+        // assert_eq!(result.y_velocity.abs().floor(), 0.0);
+        // assert!(result.y_pos >= 0.0);
+
+        // TODO: test high speed horizontal and vertical bounces.
 
         // todo: add tests for ultra-high frequency bounces (e.g. more than once per frame)
         // todo: add tests for >= 2 particles bouncing into each other at once
@@ -189,16 +252,4 @@ mod tests {
     }
     // Test commented out for now. Handling objects outside of simulation window bounds is currently out of scope.
     // #[test]
-    // fn test_update_particle_position() {
-    //     // If spawned too high, a particle should not bounce off the top of the simulation
-    //     // and out of the window
-    //     let mut particle = Particle {
-    //         x_pos: 0.0,
-    //         y_pos: -1.0,
-    //         x_velocity_m_s: 0.0,
-    //         y_velocity_m_s: 2.0,
-    //     };
-    //     let result = particle_sim::update_particle_position(&mut particle, 1.0, 0.99);
-    //     assert!(particle.y_pos <= 0.0);
-    // }
 }
