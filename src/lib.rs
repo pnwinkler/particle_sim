@@ -1,4 +1,5 @@
 use macroquad::prelude::*;
+use std::fmt;
 
 pub const SCREEN_WIDTH: f32 = 1080.0;
 pub const SCREEN_HEIGHT: f32 = 720.0;
@@ -20,7 +21,6 @@ const FRICTION_DYNAMIC_COEFFICIENT: f32 = 0.005;
 const BOUNCE_COEFFICIENT: f32 = 0.9;
 
 /* Todo: consider...
-- fix bouncing
 - make friction apply on bounces
 - implement spin, and update bounce logic etc accordingly
 - use signed distance functions or similar to calculate when a particle may be out of bounds
@@ -39,6 +39,31 @@ const BOUNCE_COEFFICIENT: f32 = 0.9;
 const STATS_FONT_SIZE: f32 = 30.0;
 const STATS_X_ANCHOR: f32 = SCREEN_WIDTH - (0.4 * SCREEN_WIDTH);
 const STATS_COLOR: Color = GREEN;
+
+#[derive(Debug, Clone)]
+pub enum BounceError {
+    CalculationDepthExceeded,
+    OutOfBoundsError(OutOfBoundsError),
+}
+
+#[derive(Debug, Clone)]
+pub struct OutOfBoundsError {
+    object_location_x: f32,
+    object_location_y: f32,
+}
+
+impl fmt::Display for OutOfBoundsError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "Object's location (X={},Y={}) is out of bounds",
+            self.object_location_x, self.object_location_y
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
+struct CalculationDepthExceeded;
 
 pub struct Particle {
     // Particle position in pixels
@@ -184,7 +209,7 @@ pub fn calculate_bounce(
     particle: &Particle,
     time_elapsed_seconds: f64,
     bounce_coefficient: f32,
-) -> BounceResult {
+) -> Result<BounceResult, BounceError> {
     /*
     Calculate the result of bouncing the input particle, and return it. A particle may bounce 0 or more times. If the
     input positions are out of bounds, then return them unmodified.
@@ -205,14 +230,19 @@ pub fn calculate_bounce(
         y_velocity: p.y_velocity_m_s,
     };
 
-    if bounce_coefficient <= 0.0001
-        || p.x_pos - PARTICLE_RADIUS_PX < 0.0
+    if bounce_coefficient <= 0.0001 {
+        // Return the input unmodified
+        return Ok(result);
+    }
+    if p.x_pos - PARTICLE_RADIUS_PX < 0.0
         || p.y_pos - PARTICLE_RADIUS_PX < 0.0
         || p.x_pos + PARTICLE_RADIUS_PX > SCREEN_WIDTH
         || p.y_pos + PARTICLE_RADIUS_PX > SCREEN_HEIGHT
     {
-        // Return the input unmodified
-        return result;
+        return Err(BounceError::OutOfBoundsError(OutOfBoundsError {
+            object_location_x: p.x_pos,
+            object_location_y: p.y_pos,
+        }));
     }
 
     assert!(bounce_coefficient < 1.0);
@@ -232,14 +262,28 @@ pub fn calculate_bounce(
         bounce_coefficient,
     );
 
-    result.x_pos = partial_res_x.axis_position;
-    result.x_velocity = partial_res_x.axis_velocity;
+    match partial_res_x {
+        Ok(partial) => {
+            result.x_pos = partial.axis_position;
+            result.x_velocity = partial.axis_velocity;
+        }
+        Err(_e) => {
+            return Err(BounceError::CalculationDepthExceeded);
+        }
+    }
 
-    result.y_pos = partial_res_y.axis_position;
-    result.y_velocity = partial_res_y.axis_velocity;
+    match partial_res_y {
+        Ok(partial) => {
+            result.y_pos = partial.axis_position;
+            result.y_velocity = partial.axis_velocity;
+        }
+        Err(_e) => {
+            return Err(BounceError::CalculationDepthExceeded);
+        }
+    }
 
     println!("INPUT Y: {}, OUTPUT_Y: {}", p.y_pos, result.y_pos);
-    return result;
+    return Ok(result);
 }
 
 struct PartialBounceResult {
@@ -258,7 +302,7 @@ fn bounce_helper(
     axis_velocity: f32,
     time_elapsed_seconds: f64,
     bounce_coefficient: f32,
-) -> PartialBounceResult {
+) -> Result<PartialBounceResult, CalculationDepthExceeded> {
     /*
         This function helps calculate bounces
     */
@@ -269,13 +313,10 @@ fn bounce_helper(
         axis_velocity,
     };
 
-    // if axis_velocity.abs().floor() <= 0.001 {
-    //     return res;
-    // }
-
     let time_multiplier = time_elapsed_seconds as f32;
-    let mut counter = 1;
-    let max_refreshes = 20;
+    let mut counter = 0;
+    // This value is arbitrarily chosen
+    let max_bounce_calculations = 100;
 
     // These values here are signed, and indicate the direction in each axis that the particle can move
     let directional_allowance_0;
@@ -308,10 +349,15 @@ fn bounce_helper(
         {
             break;
         }
-        // DEBUG code
+
+        // This block is here both for performance reasons, and to rule out any possible infinite loop
         counter += 1;
-        if counter == max_refreshes {
-            panic!("Programming error");
+        if counter == max_bounce_calculations {
+            // let str = format!(
+            //     "Warning! Maximum number of bounces per tick ({}) exceeded.",
+            //     max_bounce_calculations
+            // );
+            return Err(CalculationDepthExceeded);
         }
 
         travel_remaining = -1.0 * travel_remaining * bounce_coefficient;
@@ -323,7 +369,7 @@ fn bounce_helper(
     }
     res.axis_position = axis_position + travel_remaining;
     res.axis_velocity = new_velocity;
-    return res;
+    return Ok(res);
 }
 
 pub fn remove_mantissa(num: f32) -> f32 {
@@ -495,13 +541,22 @@ pub async fn p_main() {
 
             let bounce_result = calculate_bounce(p, time_elapsed, BOUNCE_COEFFICIENT);
 
-            set_particle_properties_within_bounds(
-                p,
-                bounce_result.x_pos,
-                bounce_result.y_pos,
-                bounce_result.x_velocity,
-                bounce_result.y_velocity,
-            );
+            match bounce_result {
+                Ok(bounce_result) => {
+                    set_particle_properties_within_bounds(
+                        p,
+                        bounce_result.x_pos,
+                        bounce_result.y_pos,
+                        bounce_result.x_velocity,
+                        bounce_result.y_velocity,
+                    );
+                }
+                // todo: maybe split the handling of different errors out, here
+                Err(_error) => {
+                    println!("Warning! Error occurred when calculating bounces. Resetting particle parameters");
+                    set_particle_properties_within_bounds(p, 0.0, 0.0, 0.0, 0.0);
+                }
+            }
 
             // todo: resolve why this function clamps particles to the left or right hand side of the screen
             // clamp_particle_position_to_screen(p, false);
