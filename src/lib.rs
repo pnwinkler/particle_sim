@@ -7,7 +7,7 @@ pub const SCREEN_WIDTH: f32 = 1080.0;
 pub const SCREEN_HEIGHT: f32 = 720.0;
 
 // The default diameter in pixels of a particle
-const PARTICLE_RADIUS_PX: f32 = 10.0;
+pub const PARTICLE_RADIUS_PX: f32 = 10.0;
 
 // The weight of each particle in kilograms
 const PARTICLE_MASS_KG: f32 = 1.0;
@@ -23,6 +23,7 @@ const FRICTION_DYNAMIC_COEFFICIENT: f32 = 0.005;
 const BOUNCE_COEFFICIENT: f32 = 0.9;
 
 /* Todo: consider...
+- make deterministic!! To do this, consider writing console output to file for two 10 second runs, then comparing them.
 - make friction apply on bounces
 - implement spin, and update bounce logic etc accordingly
 - use signed distance functions or similar to calculate when a particle may be out of bounds
@@ -136,7 +137,7 @@ pub fn calculate_friction_deceleration(
     friction_dynamic_coefficient: f32,
 ) -> f32 {
     // We use the following formula: F=ma
-    // TODO: implement static coefficient
+    // todo: implement static coefficient
 
     if !particle_touching_ground(particle) {
         return 0.0;
@@ -259,7 +260,10 @@ pub fn calculate_bounce(
         }
     }
 
-    println!("INPUT Y: {}, OUTPUT_Y: {}", p.y_pos, result.y_pos);
+    println!(
+        "Bounce input Y: {}, output Y: {}, input X: {}, output X: {}",
+        p.y_pos, result.y_pos, p.x_pos, result.x_pos
+    );
     return Ok(result);
 }
 
@@ -298,28 +302,32 @@ fn bounce_helper(
     // These values here are signed, and indicate the direction in each axis that the particle can move
     let directional_allowance_0;
     let directional_allowance_1;
+    let max_allowed_position;
     match axis {
         Axis::X => {
             // How much distance the particle can legally move left and right respectively.
-            directional_allowance_0 = (PARTICLE_RADIUS_PX - axis_position).floor();
+            directional_allowance_0 = (PARTICLE_RADIUS_PX - axis_position).ceil();
             directional_allowance_1 = ((SCREEN_WIDTH - PARTICLE_RADIUS_PX) - axis_position).floor();
+            max_allowed_position = SCREEN_WIDTH - PARTICLE_RADIUS_PX;
         }
         Axis::Y => {
             // How much distance the particle can legally move up and down respectively.
-            directional_allowance_0 = (PARTICLE_RADIUS_PX - axis_position).floor();
+            directional_allowance_0 = (PARTICLE_RADIUS_PX - axis_position).ceil();
             directional_allowance_1 =
                 ((SCREEN_HEIGHT - PARTICLE_RADIUS_PX) - axis_position).floor();
+            max_allowed_position = SCREEN_HEIGHT - PARTICLE_RADIUS_PX;
         }
     }
     assert!(directional_allowance_0 <= 0.0);
     assert!(directional_allowance_1 >= 0.0);
 
-    // signed distance tracking the remaining amount of travel the particle will do in the examined timeframe
+    // signed distance tracking the remaining amount of travel the particle can do in the examined timeframe
     let mut travel_remaining =
         convert_meters_to_pixels(axis_velocity * time_multiplier, PIXELS_PER_METER);
     let mut new_velocity = axis_velocity;
     loop {
-        // Break if remaining travel distance falls within limits for travel in a given direction
+        // Break if remaining travel distance falls within limits for travel in a given direction,
+        // or the particle's moving too slowly to be worth calculating a bounce for.
         if (new_velocity.abs().floor() == 0.0)
             || ((new_velocity <= 0.0) && (travel_remaining >= directional_allowance_0))
             || ((new_velocity >= 0.0) && (travel_remaining <= directional_allowance_1))
@@ -330,10 +338,6 @@ fn bounce_helper(
         // This block is here both for performance reasons, and to rule out any possible infinite loop
         counter += 1;
         if counter == max_bounce_calculations {
-            // let str = format!(
-            //     "Warning! Maximum number of bounces per tick ({}) exceeded.",
-            //     max_bounce_calculations
-            // );
             return Err(CalculationDepthExceeded);
         }
 
@@ -346,6 +350,19 @@ fn bounce_helper(
     }
     res.axis_position = axis_position + travel_remaining;
     res.axis_velocity = new_velocity;
+
+    // the break condition in the block above can result in the new position being out of bounds.
+    // TODO: think if this velocity nullification makes sense in the X axis? Doesn't this circumvent friction?
+    if res.axis_position > max_allowed_position {
+        // when this condition is true, the object has negigible velocity and is more or less on
+        // the ground, so we can safely nullify its velocity
+        res.axis_position = max_allowed_position;
+        res.axis_velocity = 0.0;
+    }
+    if res.axis_position < PARTICLE_RADIUS_PX {
+        res.axis_position = PARTICLE_RADIUS_PX;
+    }
+
     return Ok(res);
 }
 
@@ -373,19 +390,33 @@ pub fn set_particle_properties_within_bounds(
     p.y_velocity_m_s = new_y_velocity;
 
     if SCREEN_HEIGHT < (p.y_pos + PARTICLE_RADIUS_PX).floor() {
-        println!("DEBUG a: {}, {}", p.y_pos, p.y_pos + PARTICLE_RADIUS_PX);
+        println!(
+            "DEBUG: particle fully or partially off-screen at Y={}",
+            p.y_pos
+        );
         p.y_pos = SCREEN_HEIGHT - PARTICLE_RADIUS_PX;
         p.y_velocity_m_s = 0.0;
     } else if 0.0 > (p.y_pos - PARTICLE_RADIUS_PX).ceil() {
-        println!("DEBUG b: {}", p.y_pos);
+        println!(
+            "DEBUG: particle fully or partially off-screen at Y={}",
+            p.y_pos
+        );
         p.y_pos = PARTICLE_RADIUS_PX;
         p.y_velocity_m_s = 0.0;
     }
 
     if SCREEN_WIDTH < (p.x_pos + PARTICLE_RADIUS_PX).floor() {
+        println!(
+            "DEBUG: particle fully or partially off-screen at X={}",
+            p.x_pos
+        );
         p.x_pos = SCREEN_WIDTH - PARTICLE_RADIUS_PX;
         p.x_velocity_m_s = 0.0;
     } else if 0.0 > (p.x_pos - PARTICLE_RADIUS_PX).ceil() {
+        println!(
+            "DEBUG: particle fully or partially off-screen at X={}",
+            p.x_pos
+        );
         p.x_pos = PARTICLE_RADIUS_PX;
         p.x_velocity_m_s = 0.0;
     }
@@ -393,7 +424,7 @@ pub fn set_particle_properties_within_bounds(
 
 /// Draw simulation stats to screen
 pub fn draw_stats(particles: &Vec<Particle>) {
-    // todo: fix sum_y_positions so that it doesn't overflow or nan or whatever with 1000 particles
+    // TODO: fix sum_y_positions so that it doesn't overflow or nan or whatever with 1000 particles
     let mut sum_y_velocity = 0.0;
     let mut sum_x_velocity = 0.0;
     let mut sum_y_positions = 0.0;
@@ -446,19 +477,11 @@ pub async fn p_main() {
     // Setup
     request_new_screen_size(SCREEN_WIDTH, SCREEN_HEIGHT);
     let mut particles: Vec<Particle> = Vec::new();
-    // particles.push(Particle {
-    //     x_pos: 0.5 * SCREEN_WIDTH,
-    //     y_pos: convert_meters_to_pixels(72.0 - 50.0, PIXELS_PER_METER), // 0.25 * SCREEN_HEIGHT,
-    //     x_velocity_m_s: 55.0,
-    //     y_velocity_m_s: 1.0,
-    // });
-
-    let initial_y_velocity = -0.5 * SCREEN_HEIGHT - 1.0;
     particles.push(Particle {
         x_pos: 0.5 * SCREEN_WIDTH,
-        y_pos: 0.5 * SCREEN_HEIGHT, // arbitrarily chosen, but we want the particle not already colliding on spawn
-        x_velocity_m_s: 0.0,
-        y_velocity_m_s: initial_y_velocity, // we want the ball to hit the ground within 1 tick
+        y_pos: convert_meters_to_pixels(72.0 - 50.0, PIXELS_PER_METER), // 0.25 * SCREEN_HEIGHT,
+        x_velocity_m_s: 55.0,
+        y_velocity_m_s: 1.0,
     });
 
     // As of 2024-05-09, 2550 is my maximum number of particles for constant >= 140 FPS
@@ -499,7 +522,10 @@ pub async fn p_main() {
         // }
 
         for p in particles.iter_mut() {
-            println!("BEFORE: {} pos\t{} vel\t", p.y_pos, p.y_velocity_m_s);
+            println!(
+                "Before calculations: Y={}, Y_vel={}, X={}, X_vel={}",
+                p.y_pos, p.y_velocity_m_s, p.x_pos, p.x_velocity_m_s
+            );
 
             p.y_velocity_m_s += calculate_gravity_effect_on_velocity(p, GRAVITY_MS, time_elapsed);
 
@@ -537,9 +563,10 @@ pub async fn p_main() {
                 }
             }
 
-            // todo: resolve why this function clamps particles to the left or right hand side of the screen
-            // clamp_particle_position_to_screen(p, false);
-            println!("AFTER: {} pos\t{} vel", p.y_pos, p.y_velocity_m_s);
+            println!(
+                "After calculations: Y={}, Y_vel={}, X={}, X_vel={}",
+                p.y_pos, p.y_velocity_m_s, p.x_pos, p.x_velocity_m_s
+            );
         }
         draw_particles(&particles);
 

@@ -230,5 +230,35 @@ mod tests {
         let result = particle_sim::calculate_bounce(&particle, 200.0, 0.01).unwrap();
         assert_eq!(result.y_velocity.abs().floor(), 0.0);
         assert!(result.y_pos >= 0.0);
+
+        // Check that bouncing does not push a particle on the edge of the arena over it
+        let initial_y_pos = SCREEN_HEIGHT - PARTICLE_RADIUS_PX - 0.001;
+        let particle = Particle {
+            x_pos: 0.5 * SCREEN_WIDTH,
+            // we want the particle ever so slightly in bounds
+            y_pos: initial_y_pos,
+            x_velocity_m_s: 0.0,
+            // we want a negligible velocity, one which is beyond our velocity cut-off
+            y_velocity_m_s: 0.05,
+        };
+        // Check that the resulting bounce does not move the particle out of bounds
+        let result = particle_sim::calculate_bounce(&particle, 1.0, 0.9).unwrap();
+        println!("{}", result.y_pos);
+        assert!(result.y_pos <= SCREEN_HEIGHT - PARTICLE_RADIUS_PX);
+
+        // Check that bouncing does not push a particle on the edge of the arena over it
+        let initial_x_pos = PARTICLE_RADIUS_PX + 0.001;
+        let particle = Particle {
+            x_pos: initial_x_pos,
+            // we want the particle ever so slightly in bounds
+            y_pos: 0.5 * SCREEN_HEIGHT,
+            x_velocity_m_s: -0.05,
+            // we want a negligible velocity, one which is beyond our velocity cut-off
+            y_velocity_m_s: 0.0,
+        };
+        // Check that the resulting bounce does not move the particle out of bounds
+        let result = particle_sim::calculate_bounce(&particle, 1.0, 0.9).unwrap();
+        println!("THING {}", result.x_pos);
+        assert!(result.x_pos >= PARTICLE_RADIUS_PX);
     }
 }
