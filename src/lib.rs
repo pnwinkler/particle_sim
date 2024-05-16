@@ -1,3 +1,5 @@
+//! A realistic particle simulator
+
 use macroquad::prelude::*;
 use std::fmt;
 
@@ -80,10 +82,9 @@ pub struct XY {
     pub y: f32,
 }
 
+/// Returns true if the point falls within a circle, else false
+/// The following formula is used: a^2 + b^2 = c^2. If c <= radius, then the point is considered to be within the circle
 pub fn does_circle_intersect(circle_center: XY, circle_radius: f32, point: XY) -> bool {
-    // Returns true if the point falls within a circle, else false
-    // a^2 + b^2 = c^2. If c <= radius, then the point is within the circle
-
     // tolerance is to account for floating point imprecision
     let tolerance = 0.0001;
     let a_2 = (circle_center.x - point.x).powf(2.0);
@@ -111,36 +112,30 @@ pub fn convert_pixels_to_meters(pixels: f32, pixels_per_meter: f32) -> f32 {
     return pixels / pixels_per_meter;
 }
 
+/// Calculate the acceleration of a particle in units per second. It expects both velocities to use the same unit.
 pub fn calculate_particle_acceleration(
     new_velocity: f32,
     old_velocity: f32,
     time_elapsed_seconds: f32,
 ) -> f32 {
-    /*
-    Calculate the acceleration of a particle.
-    We use the formula F = dv / dt instead of the valid alternative F=m/a
-    */
-
+    // We use the formula F = dv / dt instead of the valid alternative F=m/a
     return (new_velocity - old_velocity) / time_elapsed_seconds;
 }
 
+/// Returns a True if the input particle is touching the ground, else False. This function is not suitable for off-screen particles.
 pub fn particle_touching_ground(particle: &Particle) -> bool {
-    // Return True if the location of any pixel within a particle has a y location greater than or equal to that of the floor
-    // Else, False
+    // Edge case: returns true if a particle has fallen off the bottom of the screen.
     return (particle.y_pos + PARTICLE_RADIUS_PX) >= SCREEN_HEIGHT;
 }
 
+/// Calculate the signed velocity change due to friction for a particle. Returns a value <= 0 if object is moving right, else >= 0.
+/// For realistic friction, the coefficients should be positive values.
+/// For now, we only apply friction in the horizontal dimension and for particles in contact with the ground.
 pub fn calculate_friction_deceleration(
     particle: &Particle,
     friction_dynamic_coefficient: f32,
 ) -> f32 {
-    /*
-    Calculate friction deceleration for a particle. Returns a value <= 0 if object is moving right, else >= 0.
-    For realistic friction, the coefficients should be positive values.
-    For now, we only apply friction in the horizontal dimension and for particles in contact with the ground.
-    We use the following formulas:
-        F=ma
-    */
+    // We use the following formula: F=ma
     // TODO: implement static coefficient
 
     if !particle_touching_ground(particle) {
@@ -158,45 +153,29 @@ pub fn calculate_friction_deceleration(
     let friction_force = f * PARTICLE_MASS_KG * GRAVITY_MS;
     let friction_deceleration = friction_force / PARTICLE_MASS_KG;
 
-    // We need to oppose the object's velocity
-    if particle.x_velocity_m_s > 0.0 {
-        if friction_deceleration > particle.x_velocity_m_s {
-            return -1.0 * particle.x_velocity_m_s;
-        }
-        return -1.0 * friction_deceleration;
+    // The -1.0 multipliers let us oppose the object's velocity
+    if friction_deceleration > particle.x_velocity_m_s.abs() {
+        return -1.0 * particle.x_velocity_m_s;
     }
-
-    if particle.x_velocity_m_s < 0.0 {
-        if friction_deceleration > particle.x_velocity_m_s.abs() {
-            return -1.0 * particle.x_velocity_m_s;
-        }
+    if particle.x_velocity_m_s > 0.0 {
+        return -1.0 * friction_deceleration;
     }
     return friction_deceleration;
 }
 
+/// Calculate the effect of gravity in meters over the elapsed timeframe, if it's not resting on any surface
+/// (currently we only check for the ground)
 pub fn calculate_gravity_effect_on_velocity(
     particle: &Particle,
     gravity_acceleration_ms: f32,
     time_elapsed_seconds: f64,
 ) -> f32 {
-    // Calculate the effect of gravity in meters over the elapsed timeframe, if it's not resting on any surface
-    // (currently we only check for the ground)
+    // todo: add checks for if particle is resting on another object
     if particle_touching_ground(particle) {
         return 0.0;
     }
     return gravity_acceleration_ms * time_elapsed_seconds as f32;
 }
-
-// fn distance_out_of_bounds(pixel_location: f32, axis_min_val: f32, axis_max_val: f32) -> f32 {
-//     // Return the unsigned distance out of bounds on a given axis that a pixel is
-//     // A negative value means the pixel is out of bounds on the left, a positive, on the right.
-//     if pixel_location < axis_min_val {
-//         return axis_min_val - pixel_location;
-//     } else if pixel_location > axis_max_val {
-//         return pixel_location - axis_max_val;
-//     }
-//     return 0.0;
-// }
 
 pub struct BounceResult {
     pub x_pos: f32,
@@ -205,21 +184,19 @@ pub struct BounceResult {
     pub y_velocity: f32,
 }
 
+/// Calculate and return the post-bounce state of the input particle.
+///
+/// A particle may bounce 0 or more times. If the input particle's position is out of bounds, or its velocity so extreme that it exceeds calculation limits, then return an error.
+/// * `particle` - the object for which bounce values should be calculated.
+/// * `time_elapsed_seconds` - the time, in seconds, over which to calculate the bounce values.
+/// * `bounce_coefficient` - the bounciness of the object, where 0 means no bounce, and 1 means infinite bouncing. This value must be between 0 and 1 inclusive!
+///
+/// Output - an object representing the updated position and velocities of the input object.
 pub fn calculate_bounce(
     particle: &Particle,
     time_elapsed_seconds: f64,
     bounce_coefficient: f32,
 ) -> Result<BounceResult, BounceError> {
-    /*
-    Calculate the result of bouncing the input particle, and return it. A particle may bounce 0 or more times. If the
-    input positions are out of bounds, then return them unmodified.
-     param particle: the object for which bounce values should be calculated.
-     param time_elapsed_seconds: the time, in seconds, over which to calculate the bounce values.
-     param bounce_coefficient: the bounciness of the object, where 0 means no bounce, and 1 means infinite bouncing.
-      This value must be between 0 and 1 inclusive!
-     output: an object representing the updated position and velocities of the input object.
-    */
-
     // todo: add bounce interactions between particles
 
     let p = particle;
@@ -372,15 +349,16 @@ fn bounce_helper(
     return Ok(res);
 }
 
-pub fn remove_mantissa(num: f32) -> f32 {
-    // Remove the decimal places from an input number
-    if num > 0.0 {
-        return num.floor();
-    } else {
-        return (num + 1.0).floor();
-    }
-}
+/// Return the input number with decimal places all set to 0
+// pub fn remove_mantissa(num: f32) -> f32 {
+//     if num > 0.0 {
+//         return num.floor();
+//     } else {
+//         return (num + 1.0).floor();
+//     }
+// }
 
+/// Update a particle's properties, while remaining within a range of acceptable values. Also reset the velocity of off-screen particles, and clamp it to be within arena bounds
 pub fn set_particle_properties_within_bounds(
     particle: &mut Particle,
     new_x_pos: f32,
@@ -388,10 +366,6 @@ pub fn set_particle_properties_within_bounds(
     new_x_velocity: f32,
     new_y_velocity: f32,
 ) {
-    /*
-    Update a particle's properties, whiler remaining within a range of acceptable values.
-    Also reset velocity of off-screen particles.
-    */
     let p = particle;
     p.x_pos = new_x_pos;
     p.y_pos = new_y_pos;
@@ -417,9 +391,8 @@ pub fn set_particle_properties_within_bounds(
     }
 }
 
+/// Draw simulation stats to screen
 pub fn draw_stats(particles: &Vec<Particle>) {
-    // Draw stats to screen
-
     // todo: fix sum_y_positions so that it doesn't overflow or nan or whatever with 1000 particles
     let mut sum_y_velocity = 0.0;
     let mut sum_x_velocity = 0.0;
@@ -445,11 +418,6 @@ pub fn draw_stats(particles: &Vec<Particle>) {
     let particle_mean_altitude_str =
         "Mean altitude (m): ".to_owned() + &particle_mean_altitude_meters.to_string();
 
-    // println!(
-    //     "{},{},{}",
-    //     sum_y_positions, particle_mean_altitude_px, particle_mean_altitude_meters
-    // );
-
     let strings: [&String; 6] = [
         &get_fps().to_string(),
         &y_velocity_str,
@@ -472,28 +440,26 @@ pub fn draw_stats(particles: &Vec<Particle>) {
 }
 
 pub async fn p_main() {
-    // Setup
-
-    // Note that very fast speeds (in the range of >= 200 m/s) may, for now, lead to erratic behavior.
-    // Note also, that alt-tabbing or otherwise removing focus from the window may affect simulation results
+    // Note that alt-tabbing or otherwise removing focus from the window may affect simulation results
     //  (my guess is this is due to the OS / graphics driver or something reducing the framerate of unfocused windows)
 
+    // Setup
     request_new_screen_size(SCREEN_WIDTH, SCREEN_HEIGHT);
     let mut particles: Vec<Particle> = Vec::new();
-    particles.push(Particle {
-        x_pos: 0.5 * SCREEN_WIDTH,
-        y_pos: convert_meters_to_pixels(72.0 - 50.0, PIXELS_PER_METER), // 0.25 * SCREEN_HEIGHT,
-        x_velocity_m_s: 55.0,
-        y_velocity_m_s: 1.0,
-    });
-
-    // let initial_y_velocity = -0.5 * SCREEN_HEIGHT - 1.0;
     // particles.push(Particle {
     //     x_pos: 0.5 * SCREEN_WIDTH,
-    //     y_pos: 0.5 * SCREEN_HEIGHT, // arbitrarily chosen, but we want the particle not already colliding on spawn
-    //     x_velocity_m_s: 0.0,
-    //     y_velocity_m_s: initial_y_velocity, // we want the ball to hit the ground within 1 tick
+    //     y_pos: convert_meters_to_pixels(72.0 - 50.0, PIXELS_PER_METER), // 0.25 * SCREEN_HEIGHT,
+    //     x_velocity_m_s: 55.0,
+    //     y_velocity_m_s: 1.0,
     // });
+
+    let initial_y_velocity = -0.5 * SCREEN_HEIGHT - 1.0;
+    particles.push(Particle {
+        x_pos: 0.5 * SCREEN_WIDTH,
+        y_pos: 0.5 * SCREEN_HEIGHT, // arbitrarily chosen, but we want the particle not already colliding on spawn
+        x_velocity_m_s: 0.0,
+        y_velocity_m_s: initial_y_velocity, // we want the ball to hit the ground within 1 tick
+    });
 
     // As of 2024-05-09, 2550 is my maximum number of particles for constant >= 140 FPS
     // for x in 1..2550 {
@@ -551,10 +517,16 @@ pub async fn p_main() {
                         bounce_result.y_velocity,
                     );
                 }
-                // todo: maybe split the handling of different errors out, here
+                // todo: split the handling of different errors out, here
                 Err(_error) => {
                     println!("Warning! Error occurred when calculating bounces. Resetting particle parameters");
-                    set_particle_properties_within_bounds(p, 0.0, 0.0, 0.0, 0.0);
+                    set_particle_properties_within_bounds(
+                        p,
+                        0.5 * SCREEN_WIDTH,
+                        0.5 * SCREEN_HEIGHT,
+                        0.0,
+                        0.0,
+                    );
                 }
             }
 
