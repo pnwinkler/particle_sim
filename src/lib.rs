@@ -58,7 +58,7 @@ impl fmt::Display for OutOfBoundsError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "Object's location (X={},Y={}) is out of bounds",
+            "Error: object's location (X={},Y={}) is out of bounds",
             self.object_location_x, self.object_location_y
         )
     }
@@ -517,9 +517,16 @@ pub async fn p_main() {
                         bounce_result.y_velocity,
                     );
                 }
-                // todo: split the handling of different errors out, here
-                Err(_error) => {
-                    println!("Warning! Error occurred when calculating bounces. Resetting particle parameters");
+                Err(e) => {
+                    match e {
+                        BounceError::CalculationDepthExceeded => {
+                            println!("Warning! Calculation depth exceeded when calculating bounces. Resetting particle parameters");
+                        }
+                        BounceError::OutOfBoundsError(oob) => {
+                            println!("Warning! Failed to calculate bounces. Input particle out of bounds. Resetting particle parameters");
+                            println!("{}", oob);
+                        }
+                    }
                     set_particle_properties_within_bounds(
                         p,
                         0.5 * SCREEN_WIDTH,
