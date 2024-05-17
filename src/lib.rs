@@ -23,7 +23,6 @@ const FRICTION_DYNAMIC_COEFFICIENT: f32 = 0.005;
 const BOUNCE_COEFFICIENT: f32 = 0.9;
 
 /* Todo: consider...
-- make deterministic!! To do this, consider writing console output to file for two 10 second runs, then comparing them.
 - make friction apply on bounces
 - implement spin, and update bounce logic etc accordingly
 - use signed distance functions or similar to calculate when a particle may be out of bounds
@@ -470,6 +469,56 @@ pub fn draw_stats(particles: &Vec<Particle>) {
     }
 }
 
+pub fn simulation_tick(particles: &mut Vec<Particle>, time_elapsed_seconds: f64) {
+    for p in particles.iter_mut() {
+        println!(
+            "Before calculations: Y={}, Y_vel={}, X={}, X_vel={}",
+            p.y_pos, p.y_velocity_m_s, p.x_pos, p.x_velocity_m_s
+        );
+
+        p.y_velocity_m_s += calculate_gravity_effect_on_velocity(p, GRAVITY_MS, time_elapsed_seconds);
+
+        p.x_velocity_m_s += calculate_friction_deceleration(p, FRICTION_DYNAMIC_COEFFICIENT);
+
+        let bounce_result = calculate_bounce(p, time_elapsed_seconds, BOUNCE_COEFFICIENT);
+
+        match bounce_result {
+            Ok(bounce_result) => {
+                set_particle_properties_within_bounds(
+                    p,
+                    bounce_result.x_pos,
+                    bounce_result.y_pos,
+                    bounce_result.x_velocity,
+                    bounce_result.y_velocity,
+                );
+            }
+            Err(e) => {
+                match e {
+                    BounceError::CalculationDepthExceeded => {
+                        println!("Warning! Calculation depth exceeded when calculating bounces. Resetting particle parameters");
+                    }
+                    BounceError::OutOfBoundsError(oob) => {
+                        println!("Warning! Failed to calculate bounces. Input particle out of bounds. Resetting particle parameters");
+                        println!("{}", oob);
+                    }
+                }
+                set_particle_properties_within_bounds(
+                    p,
+                    0.5 * SCREEN_WIDTH,
+                    0.5 * SCREEN_HEIGHT,
+                    0.0,
+                    0.0,
+                );
+            }
+        }
+
+        println!(
+            "After calculations: Y={}, Y_vel={}, X={}, X_vel={}",
+            p.y_pos, p.y_velocity_m_s, p.x_pos, p.x_velocity_m_s
+        );
+    }
+}
+
 pub async fn p_main() {
     // Note that alt-tabbing or otherwise removing focus from the window may affect simulation results
     //  (my guess is this is due to the OS / graphics driver or something reducing the framerate of unfocused windows)
@@ -485,7 +534,7 @@ pub async fn p_main() {
     });
 
     // As of 2024-05-09, 2550 is my maximum number of particles for constant >= 140 FPS
-    // for x in 1..2550 {
+    // for x in 1..500 {
     //     particles.push(Particle {
     //         x_pos: PARTICLE_RADIUS_PX + (x * 1) as f32,
     //         y_pos: PARTICLE_RADIUS_PX +  (x * 1) as f32,
@@ -493,8 +542,6 @@ pub async fn p_main() {
     //         y_velocity_m_s: 250.0,
     //     });
     // }
-
-    let mut last_tick_time = get_time();
 
     // Constraint checks: check for any unsupported parameter values that aren't obviously ridiculous.
     // A negative bounce coefficient makes no sense. Either an object bounces (val >=0) or doesn't (val == 0)
@@ -505,11 +552,13 @@ pub async fn p_main() {
     assert!(particles[0].x_pos <= SCREEN_WIDTH - PARTICLE_RADIUS_PX);
     assert!(particles[0].y_pos <= SCREEN_HEIGHT - PARTICLE_RADIUS_PX);
 
+    let mut last_tick_time = get_time();
+
     // Main loop
     loop {
         let now = get_time();
         let time_elapsed = now - last_tick_time;
-        clear_background(BLACK);
+        simulation_tick(&mut particles, time_elapsed);
 
         // FPS limiter copied from https://github.com/not-fl3/macroquad/issues/380#issuecomment-1026728046
         // let minimum_frame_time = 1. / 1.; // 60 FPS
@@ -521,55 +570,8 @@ pub async fn p_main() {
         //     std::thread::sleep(std::time::Duration::from_millis(time_to_sleep as u64));
         // }
 
-        for p in particles.iter_mut() {
-            println!(
-                "Before calculations: Y={}, Y_vel={}, X={}, X_vel={}",
-                p.y_pos, p.y_velocity_m_s, p.x_pos, p.x_velocity_m_s
-            );
-
-            p.y_velocity_m_s += calculate_gravity_effect_on_velocity(p, GRAVITY_MS, time_elapsed);
-
-            p.x_velocity_m_s += calculate_friction_deceleration(p, FRICTION_DYNAMIC_COEFFICIENT);
-
-            let bounce_result = calculate_bounce(p, time_elapsed, BOUNCE_COEFFICIENT);
-
-            match bounce_result {
-                Ok(bounce_result) => {
-                    set_particle_properties_within_bounds(
-                        p,
-                        bounce_result.x_pos,
-                        bounce_result.y_pos,
-                        bounce_result.x_velocity,
-                        bounce_result.y_velocity,
-                    );
-                }
-                Err(e) => {
-                    match e {
-                        BounceError::CalculationDepthExceeded => {
-                            println!("Warning! Calculation depth exceeded when calculating bounces. Resetting particle parameters");
-                        }
-                        BounceError::OutOfBoundsError(oob) => {
-                            println!("Warning! Failed to calculate bounces. Input particle out of bounds. Resetting particle parameters");
-                            println!("{}", oob);
-                        }
-                    }
-                    set_particle_properties_within_bounds(
-                        p,
-                        0.5 * SCREEN_WIDTH,
-                        0.5 * SCREEN_HEIGHT,
-                        0.0,
-                        0.0,
-                    );
-                }
-            }
-
-            println!(
-                "After calculations: Y={}, Y_vel={}, X={}, X_vel={}",
-                p.y_pos, p.y_velocity_m_s, p.x_pos, p.x_velocity_m_s
-            );
-        }
+        clear_background(BLACK);
         draw_particles(&particles);
-
         draw_stats(&particles);
 
         last_tick_time = now;

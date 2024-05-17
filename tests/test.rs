@@ -261,4 +261,43 @@ mod tests {
         println!("THING {}", result.x_pos);
         assert!(result.x_pos >= PARTICLE_RADIUS_PX);
     }
+
+    /*
+    Integration tests below
+    */
+
+    #[test]
+    fn test_simulation_tick() {
+        // Check that running our simulation twice with the same parameters gives the same results each time
+        // Other properties will need to be added here, if particles acquire more properties!
+        let ticks = 10;
+        let seconds_elapsed = 1.0;
+        let mut particles: Vec<Particle> = vec![Particle {
+            x_pos: 0.5 * SCREEN_WIDTH,
+            y_pos: 0.5 * SCREEN_HEIGHT,
+            x_velocity_m_s: 0.0,
+            y_velocity_m_s: 0.0,
+        }];
+        // Check that the resulting bounce does not move the particle out of bounds
+        for _i in 0..ticks {
+             particle_sim::simulation_tick(&mut particles, seconds_elapsed);
+        }
+        let result_1 = particles.get(0).unwrap();
+
+        let mut particles: Vec<Particle> = vec![Particle {
+            x_pos: 0.5 * SCREEN_WIDTH,
+            y_pos: 0.5 * SCREEN_HEIGHT,
+            x_velocity_m_s: 0.0,
+            y_velocity_m_s: 0.0,
+        }];
+        for _i in 0..ticks {
+             particle_sim::simulation_tick(&mut particles, seconds_elapsed);
+        }
+        let result_2 = particles.get(0).unwrap();
+
+        assert_eq!(result_1.y_velocity_m_s, result_2.y_velocity_m_s);
+        assert_eq!(result_1.x_velocity_m_s, result_2.x_velocity_m_s);
+        assert_eq!(result_1.y_pos, result_2.y_pos);
+        assert_eq!(result_1.x_pos, result_2.x_pos);
+    }
 }
