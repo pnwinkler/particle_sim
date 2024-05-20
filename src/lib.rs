@@ -16,7 +16,7 @@ const PARTICLE_MASS_KG: f32 = 1.0;
 const PARTICLE_COLOR: Color = RED;
 
 // Simulation parameters
-const PIXELS_PER_METER: f32 = 10.0;
+pub const PIXELS_PER_METER: f32 = 10.0;
 const GRAVITY_MS: f32 = 9.8;
 // const FRICTION_STATIC_COEFFICIENT: f32 = 0.02;
 const FRICTION_DYNAMIC_COEFFICIENT: f32 = 0.005;
@@ -343,7 +343,7 @@ fn bounce_helper(
         travel_remaining = -1.0 * travel_remaining * bounce_coefficient;
         new_velocity = -1.0 * new_velocity * bounce_coefficient;
         println!(
-            "Y: {},\t\t{}, \t\t{}, \t\t{}",
+            "T: {},\t\t{}, \t\t{}, \t\t{}",
             travel_remaining, new_velocity, directional_allowance_0, directional_allowance_1
         );
     }
@@ -520,9 +520,6 @@ pub fn simulation_tick(particles: &mut Vec<Particle>, time_elapsed_seconds: f64)
 }
 
 pub async fn p_main() {
-    // Note that alt-tabbing or otherwise removing focus from the window may affect simulation results
-    //  (my guess is this is due to the OS / graphics driver or something reducing the framerate of unfocused windows)
-
     // Setup
     request_new_screen_size(SCREEN_WIDTH, SCREEN_HEIGHT);
     let mut particles: Vec<Particle> = Vec::new();
@@ -546,7 +543,7 @@ pub async fn p_main() {
     // Constraint checks: check for any unsupported parameter values that aren't obviously ridiculous.
     // A negative bounce coefficient makes no sense. Either an object bounces (val >=0) or doesn't (val == 0)
     assert!(BOUNCE_COEFFICIENT >= 0.0);
-    // The particle needs to spawn fully within simulation bounds
+    // For accurate results, the particle should spawn fully within simulation bounds
     assert!(particles[0].x_pos >= PARTICLE_RADIUS_PX);
     assert!(particles[0].y_pos >= PARTICLE_RADIUS_PX);
     assert!(particles[0].x_pos <= SCREEN_WIDTH - PARTICLE_RADIUS_PX);
