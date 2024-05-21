@@ -194,8 +194,8 @@ pub struct BounceResult {
 /// Output - an object representing the updated position and velocities of the input object.
 pub fn calculate_bounce(
     particle: &Particle,
-    time_elapsed_seconds: f64,
     bounce_coefficient: f32,
+    time_elapsed_seconds: f64,
 ) -> Result<BounceResult, BounceError> {
     // todo: add bounce interactions between particles
 
@@ -293,7 +293,6 @@ fn bounce_helper(
         axis_velocity,
     };
 
-    let time_multiplier = time_elapsed_seconds as f32;
     let mut counter = 0;
     // This value is arbitrarily chosen
     let max_bounce_calculations = 100;
@@ -320,6 +319,7 @@ fn bounce_helper(
     assert!(directional_allowance_0 <= 0.0);
     assert!(directional_allowance_1 >= 0.0);
 
+    let time_multiplier = time_elapsed_seconds as f32;
     // signed distance tracking the remaining amount of travel the particle can do in the examined timeframe
     let mut travel_remaining =
         convert_meters_to_pixels(axis_velocity * time_multiplier, PIXELS_PER_METER);
@@ -480,7 +480,7 @@ pub fn simulation_tick(particles: &mut Vec<Particle>, time_elapsed_seconds: f64)
 
         p.x_velocity_m_s += calculate_friction_deceleration(p, FRICTION_DYNAMIC_COEFFICIENT);
 
-        let bounce_result = calculate_bounce(p, time_elapsed_seconds, BOUNCE_COEFFICIENT);
+        let bounce_result = calculate_bounce(p, BOUNCE_COEFFICIENT, time_elapsed_seconds);
 
         match bounce_result {
             Ok(bounce_result) => {

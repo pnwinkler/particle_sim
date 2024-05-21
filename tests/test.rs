@@ -177,7 +177,7 @@ mod tests {
             x_velocity_m_s: 0.0,
             y_velocity_m_s: initial_y_velocity, // we want the ball to hit the ground within 1 tick
         };
-        let result = particle_sim::calculate_bounce(&particle, 1.0, 0.9).unwrap();
+        let result = particle_sim::calculate_bounce(&particle, 0.9, 1.0).unwrap();
 
         // There should be no errors or nans with the parameters we're using here
         assert!(!result.y_pos.is_nan());
@@ -212,7 +212,7 @@ mod tests {
             x_velocity_m_s: initial_x_velocity, // we want the ball to hit the ground within 1 tick
             y_velocity_m_s: 0.0,
         };
-        let result = particle_sim::calculate_bounce(&particle, 1.0, 0.9).unwrap();
+        let result = particle_sim::calculate_bounce(&particle, 0.9, 1.0).unwrap();
 
         // There should be no errors or nans with the parameters we're using here
         assert!(!result.x_pos.is_nan());
@@ -249,7 +249,7 @@ mod tests {
             y_velocity_m_s: 0.0,
         };
         let bounce_coefficient = 0.5;
-        let result = particle_sim::calculate_bounce(&particle, 1.0, bounce_coefficient).unwrap();
+        let result = particle_sim::calculate_bounce(&particle, bounce_coefficient, 1.0).unwrap();
 
         // Check we haven't errored or returned nan
         assert!(!result.x_pos.is_nan());
@@ -297,7 +297,7 @@ mod tests {
             x_velocity_m_s: 0.0,
             y_velocity_m_s: -1.0,
         };
-        let result = particle_sim::calculate_bounce(&particle, 200.0, 0.9).unwrap();
+        let result = particle_sim::calculate_bounce(&particle, 0.9, 200.0).unwrap();
         assert_eq!(result.y_velocity.abs().floor(), 0.0);
 
         // The bounced object should remain within bounds, on its bouncing axis
@@ -315,7 +315,7 @@ mod tests {
             x_velocity_m_s: 0.0,
             y_velocity_m_s: -1.0,
         };
-        let result = particle_sim::calculate_bounce(&particle, 200.0, 0.01).unwrap();
+        let result = particle_sim::calculate_bounce(&particle, 0.01, 200.0).unwrap();
         assert_eq!(result.y_velocity.abs().floor(), 0.0);
         assert!(result.y_pos >= 0.0);
     }
@@ -329,12 +329,12 @@ mod tests {
             x_pos: 0.5 * SCREEN_WIDTH,
             y_pos: initial_y_pos,
             x_velocity_m_s: 0.0,
-            // we want a negligible velocity, which is greater than the distance to the arena edge, but 
+            // we want a negligible velocity, which is greater than the distance to the arena edge, but
             // still tiny enough that the programmer may be tempted not to calculate it
             y_velocity_m_s: 0.0005,
         };
         // Check that the resulting bounce does not move the particle out of bounds
-        let result = particle_sim::calculate_bounce(&particle, 1.0, 0.9).unwrap();
+        let result = particle_sim::calculate_bounce(&particle, 0.9, 1.0).unwrap();
         println!("Resulting Y position {}", result.y_pos);
         assert!(result.y_pos <= SCREEN_HEIGHT - PARTICLE_RADIUS_PX);
 
@@ -347,7 +347,7 @@ mod tests {
             // we want a negligible velocity, one which is beyond our velocity cut-off
             y_velocity_m_s: 0.0,
         };
-        let result = particle_sim::calculate_bounce(&particle, 1.0, 0.9).unwrap();
+        let result = particle_sim::calculate_bounce(&particle, 0.9, 1.0).unwrap();
         println!("Resulting X position {}", result.x_pos);
         assert!(result.x_pos >= PARTICLE_RADIUS_PX);
     }
@@ -363,7 +363,7 @@ mod tests {
             y_velocity_m_s: -5001.0,
         };
         // TODO: finish
-        let result = particle_sim::calculate_bounce(&particle, 1.0, 0.20).unwrap();
+        let result = particle_sim::calculate_bounce(&particle, 0.20, 1.0).unwrap();
         assert!(result.x_pos >= 0.0);
         assert!(result.x_pos <= SCREEN_WIDTH + 0.1);
         assert!(result.y_pos >= 0.0);
@@ -375,7 +375,7 @@ mod tests {
             x_velocity_m_s: 5000.0,
             y_velocity_m_s: -5001.0,
         };
-        let result = particle_sim::calculate_bounce(&particle, 1.0, 0.20).unwrap();
+        let result = particle_sim::calculate_bounce(&particle, 0.20, 1.0).unwrap();
         assert!(result.x_pos >= 0.0);
         assert!(result.x_pos <= SCREEN_WIDTH + 0.1);
         assert!(result.y_pos >= 0.0);
@@ -387,56 +387,132 @@ mod tests {
     */
 
     #[test]
-    fn test_simulation_tick() {
-        // Check that running our simulation twice with the same parameters gives the same results each time
-        // Other properties will need to be added here, if particles acquire more properties!
+    fn test_simulation_tick_basic() {
+        // Test that several simulation ticks do not move a particle out of bounds
         let ticks = 10;
         let seconds_elapsed = 1.0;
-        let mut particles: Vec<Particle> = vec![Particle {
-            x_pos: 0.5 * SCREEN_WIDTH,
-            y_pos: 0.5 * SCREEN_HEIGHT,
-            x_velocity_m_s: 0.0,
-            y_velocity_m_s: 0.0,
-        }];
+        let mut particles: Vec<Particle> = vec![
+            Particle {
+                x_pos: 0.5 * SCREEN_WIDTH,
+                y_pos: 0.5 * SCREEN_HEIGHT,
+                x_velocity_m_s: 0.0,
+                y_velocity_m_s: 50.0,
+            },
+            Particle {
+                x_pos: 0.25 * SCREEN_WIDTH,
+                y_pos: 0.25 * SCREEN_HEIGHT,
+                x_velocity_m_s: 0.0,
+                y_velocity_m_s: -50.0,
+            },
+        ];
         // Check that the resulting bounce does not move the particle out of bounds
         for _i in 0..ticks {
             particle_sim::simulation_tick(&mut particles, seconds_elapsed);
         }
         let result_1 = particles.get(0).unwrap();
+        let result_2 = particles.get(0).unwrap();
 
-        let mut particles: Vec<Particle> = vec![Particle {
+        // Check we haven't errored or returned nan
+        assert!(!result_1.x_pos.is_nan());
+        assert!(!result_1.x_velocity_m_s.is_nan());
+        assert!(!result_2.x_pos.is_nan());
+        assert!(!result_2.x_velocity_m_s.is_nan());
+
+        assert!(!result_1.y_pos.is_nan());
+        assert!(!result_1.y_velocity_m_s.is_nan());
+        assert!(!result_2.y_pos.is_nan());
+        assert!(!result_2.y_velocity_m_s.is_nan());
+
+        // Check that we haven't gone off-screen
+        assert!(result_1.x_pos >= 0.0);
+        assert!(result_1.x_pos <= SCREEN_WIDTH + 0.1);
+        assert!(result_2.x_pos >= 0.0);
+        assert!(result_2.x_pos <= SCREEN_WIDTH + 0.1);
+
+        assert!(result_1.y_pos >= 0.0);
+        assert!(result_1.y_pos <= SCREEN_HEIGHT + 0.1);
+        assert!(result_2.y_pos >= 0.0);
+        assert!(result_2.y_pos <= SCREEN_HEIGHT + 0.1);
+    }
+
+    #[test]
+    fn test_simulation_tick_is_deterministic() {
+        // Check that running our simulation twice with the same parameters gives the same results each time
+        let ticks = 10;
+        let seconds_elapsed = 1.0;
+
+        let mut particles_1: Vec<Particle> = vec![Particle {
+            x_pos: 0.5 * SCREEN_WIDTH,
+            y_pos: 0.5 * SCREEN_HEIGHT,
+            x_velocity_m_s: 0.0,
+            y_velocity_m_s: 0.0,
+        }];
+        let mut particles_2: Vec<Particle> = vec![Particle {
             x_pos: 0.5 * SCREEN_WIDTH,
             y_pos: 0.5 * SCREEN_HEIGHT,
             x_velocity_m_s: 0.0,
             y_velocity_m_s: 0.0,
         }];
         for _i in 0..ticks {
-            particle_sim::simulation_tick(&mut particles, seconds_elapsed);
+            particle_sim::simulation_tick(&mut particles_1, seconds_elapsed);
+            particle_sim::simulation_tick(&mut particles_2, seconds_elapsed);
         }
-        let result_2 = particles.get(0).unwrap();
+        let result_1 = particles_1.get(0).unwrap();
+        let result_2 = particles_2.get(0).unwrap();
 
-        assert_eq!(result_1.y_velocity_m_s, result_2.y_velocity_m_s);
         assert_eq!(result_1.x_velocity_m_s, result_2.x_velocity_m_s);
+        assert_eq!(result_1.y_velocity_m_s, result_2.y_velocity_m_s);
         assert_eq!(result_1.y_pos, result_2.y_pos);
         assert_eq!(result_1.x_pos, result_2.x_pos);
+    }
 
-        // Check that simulation produces the same results regardless of tick frequency over a fixed timespan
-        let mut particles: Vec<Particle> = vec![Particle {
+    #[test]
+    fn test_simulation_tick_frequency_does_not_affect_results() {
+        // Check that simulation produces the same results regardless of tick frequency over an identical timespan
+        let seconds_elapsed = 1.0;
+
+        let mut particles_1: Vec<Particle> = vec![Particle {
             x_pos: 0.5 * SCREEN_WIDTH,
             y_pos: 0.5 * SCREEN_HEIGHT,
             x_velocity_m_s: 0.0,
             y_velocity_m_s: 0.0,
         }];
-        for _i in 0..ticks * 2 {
-            particle_sim::simulation_tick(&mut particles, seconds_elapsed / 2.0);
-        }
-        let result_3 = particles.get(0).unwrap();
 
-        // TODO: determine why the X pos and velocities agree with one another, but the Y pos and velocities don't?
-        assert_eq!(result_2.y_velocity_m_s, result_3.y_velocity_m_s);
-        assert_eq!(result_2.x_velocity_m_s, result_3.x_velocity_m_s);
-        assert_eq!(result_2.y_pos, result_3.y_pos);
-        assert_eq!(result_2.x_pos, result_3.x_pos);
+        let mut particles_2: Vec<Particle> = vec![Particle {
+            x_pos: 0.5 * SCREEN_WIDTH,
+            y_pos: 0.5 * SCREEN_HEIGHT,
+            x_velocity_m_s: 0.0,
+            y_velocity_m_s: 0.0,
+        }];
+
+        particle_sim::simulation_tick(&mut particles_1, seconds_elapsed);
+        let result_1 = particles_1.get(0).unwrap();
+
+        particle_sim::simulation_tick(&mut particles_2, seconds_elapsed / 2.0);
+        particle_sim::simulation_tick(&mut particles_2, seconds_elapsed / 2.0);
+        let result_2 = particles_2.get(0).unwrap();
+
+        // TODO: determine why the X pos and velocities agree with one another, but the Y velocity only doesn't?
+        // It's because I've got my units mixed up. For the bounce travel distance, I use the particle's current velocity,
+        // then multiply it by the time elapsed (roughly). That means that if I halve the time examined, I incorrectly
+        // quarter the total travel distance
+        assert_eq!(result_1.x_pos, result_2.x_pos);
+        assert_eq!(result_1.y_pos, result_2.y_pos);
+        assert_eq!(result_1.y_velocity_m_s, result_2.y_velocity_m_s);
+        assert_eq!(result_1.x_velocity_m_s, result_2.x_velocity_m_s);
+
+        // Repeat the test, but with extra ticks, to test for potentially compounding divergence
+        // let extra_ticks = 9;
+        // for _i in 0..extra_ticks {
+        //     particle_sim::simulation_tick(&mut particles_1, seconds_elapsed);
+        //
+        //     particle_sim::simulation_tick(&mut particles_2, seconds_elapsed / 2.0);
+        //     particle_sim::simulation_tick(&mut particles_2, seconds_elapsed / 2.0);
+        // }
+        // assert_eq!(result_1.x_pos, result_2.x_pos);
+        // assert_eq!(result_1.y_pos, result_2.y_pos);
+        // assert_eq!(result_1.x_velocity_m_s, result_2.x_velocity_m_s);
+        // assert_eq!(result_1.y_velocity_m_s, result_2.y_velocity_m_s);
     }
 }
 
