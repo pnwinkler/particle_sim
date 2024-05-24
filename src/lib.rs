@@ -213,7 +213,6 @@ pub fn calculate_bounce(
     }
 
     assert!(bounce_coefficient < 1.0);
-    // TODO: add tests
     let partial_res_x = bounce_helper(
         Axis::X,
         p.position.x,
@@ -504,14 +503,12 @@ pub async fn p_main() {
     request_new_screen_size(SCREEN_WIDTH, SCREEN_HEIGHT);
     let mut particles: Vec<Particle> = Vec::new();
     particles.push(Particle {
-        position: {
-            XY {
-                x: 0.5 * SCREEN_WIDTH,
-                y: convert_meters_to_pixels(72.0 - 50.0, PIXELS_PER_METER),
-            }
+        position: XY {
+            x: 0.5 * SCREEN_WIDTH,
+            y: convert_meters_to_pixels(72.0 - 50.0, PIXELS_PER_METER),
         }, // 0.25 * SCREEN_HEIGHT,
-        velocity: { XY { x: 55.0, y: 1.0 } },
-        force: 0.0,
+        velocity: XY { x: 55.0, y: 1.0 },
+        force: XY { x: 0.0, y: 0.0 },
     });
 
     // As of 2024-05-09, 2550 is my maximum number of particles for constant >= 140 FPS
