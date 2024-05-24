@@ -1,5 +1,7 @@
 //! A realistic particle simulator
 
+pub mod objects;
+use crate::objects::*;
 use macroquad::prelude::*;
 use std::fmt;
 
@@ -23,6 +25,7 @@ const FRICTION_DYNAMIC_COEFFICIENT: f32 = 0.005;
 const BOUNCE_COEFFICIENT: f32 = 0.9;
 
 /* Todo: consider...
+- sliders
 - make friction apply on bounces
 - implement spin, and update bounce logic etc accordingly
 - use signed distance functions or similar to calculate when a particle may be out of bounds
@@ -67,21 +70,6 @@ impl fmt::Display for OutOfBoundsError {
 #[derive(Debug, Clone)]
 struct CalculationDepthExceeded;
 
-pub struct Particle {
-    // Particle position in pixels
-    pub x_pos: f32,
-    pub y_pos: f32,
-
-    // Signed particle velocity in meters per second
-    pub x_velocity_m_s: f32,
-    pub y_velocity_m_s: f32,
-}
-
-pub struct XY {
-    pub x: f32,
-    pub y: f32,
-}
-
 /// Returns true if the point falls within a circle, else false
 /// The following formula is used: a^2 + b^2 = c^2. If c <= radius, then the point is considered to be within the circle
 pub fn does_circle_intersect(circle_center: XY, circle_radius: f32, point: XY) -> bool {
@@ -96,8 +84,8 @@ pub fn does_circle_intersect(circle_center: XY, circle_radius: f32, point: XY) -
 pub fn draw_particles(particles: &Vec<Particle>) {
     for p in particles {
         draw_circle(
-            p.x_pos.floor(),
-            p.y_pos.floor(),
+            p.position.x.floor(),
+            p.position.y.floor(),
             PARTICLE_RADIUS_PX,
             PARTICLE_COLOR,
         );
@@ -125,7 +113,7 @@ pub fn calculate_particle_acceleration(
 /// Returns a True if the input particle is touching the ground, else False. This function is not suitable for off-screen particles.
 pub fn particle_touching_ground(particle: &Particle) -> bool {
     // Edge case: returns true if a particle has fallen off the bottom of the screen.
-    return (particle.y_pos + PARTICLE_RADIUS_PX) >= SCREEN_HEIGHT;
+    return (particle.position.y + PARTICLE_RADIUS_PX) >= SCREEN_HEIGHT;
 }
 
 /// Calculate the signed velocity change due to friction for a particle. Returns a value <= 0 if object is moving right, else >= 0.
@@ -144,7 +132,7 @@ pub fn calculate_friction_deceleration(
 
     // arbitrarily chosen value used to decide whether something counts as "moving" or not
     let cutoff_velocity = 0.0001;
-    if particle.x_velocity_m_s.abs() < cutoff_velocity {
+    if particle.velocity.x.abs() < cutoff_velocity {
         return 0.0;
     }
 
@@ -154,10 +142,10 @@ pub fn calculate_friction_deceleration(
     let friction_deceleration = friction_force / PARTICLE_MASS_KG;
 
     // The -1.0 multipliers let us oppose the object's velocity
-    if friction_deceleration > particle.x_velocity_m_s.abs() {
-        return -1.0 * particle.x_velocity_m_s;
+    if friction_deceleration > particle.velocity.x.abs() {
+        return -1.0 * particle.velocity.x;
     }
-    if particle.x_velocity_m_s > 0.0 {
+    if particle.velocity.x > 0.0 {
         return -1.0 * friction_deceleration;
     }
     return friction_deceleration;
@@ -178,10 +166,8 @@ pub fn calculate_gravity_effect_on_velocity(
 }
 
 pub struct BounceResult {
-    pub x_pos: f32,
-    pub y_pos: f32,
-    pub x_velocity: f32,
-    pub y_velocity: f32,
+    pub position: XY,
+    pub velocity: XY,
 }
 
 /// Calculate and return the post-bounce state of the input particle.
@@ -201,24 +187,28 @@ pub fn calculate_bounce(
 
     let p = particle;
     let mut result = BounceResult {
-        x_pos: p.x_pos,
-        y_pos: p.y_pos,
-        x_velocity: p.x_velocity_m_s,
-        y_velocity: p.y_velocity_m_s,
+        position: XY {
+            x: p.position.x,
+            y: p.position.y,
+        },
+        velocity: XY {
+            x: p.velocity.x,
+            y: p.velocity.y,
+        },
     };
 
     if bounce_coefficient <= 0.0001 {
         // Return the input unmodified
         return Ok(result);
     }
-    if p.x_pos - PARTICLE_RADIUS_PX < 0.0
-        || p.y_pos - PARTICLE_RADIUS_PX < 0.0
-        || p.x_pos + PARTICLE_RADIUS_PX > SCREEN_WIDTH
-        || p.y_pos + PARTICLE_RADIUS_PX > SCREEN_HEIGHT
+    if p.position.x - PARTICLE_RADIUS_PX < 0.0
+        || p.position.y - PARTICLE_RADIUS_PX < 0.0
+        || p.position.x + PARTICLE_RADIUS_PX > SCREEN_WIDTH
+        || p.position.y + PARTICLE_RADIUS_PX > SCREEN_HEIGHT
     {
         return Err(BounceError::OutOfBoundsError(OutOfBoundsError {
-            object_location_x: p.x_pos,
-            object_location_y: p.y_pos,
+            object_location_x: p.position.x,
+            object_location_y: p.position.y,
         }));
     }
 
@@ -226,23 +216,23 @@ pub fn calculate_bounce(
     // TODO: add tests
     let partial_res_x = bounce_helper(
         Axis::X,
-        p.x_pos,
-        p.x_velocity_m_s,
+        p.position.x,
+        p.velocity.x,
         time_elapsed_seconds,
         bounce_coefficient,
     );
     let partial_res_y = bounce_helper(
         Axis::Y,
-        p.y_pos,
-        p.y_velocity_m_s,
+        p.position.y,
+        p.velocity.y,
         time_elapsed_seconds,
         bounce_coefficient,
     );
 
     match partial_res_x {
         Ok(partial) => {
-            result.x_pos = partial.axis_position;
-            result.x_velocity = partial.axis_velocity;
+            result.position.x = partial.axis_position;
+            result.velocity.x = partial.axis_velocity;
         }
         Err(_e) => {
             return Err(BounceError::CalculationDepthExceeded);
@@ -251,8 +241,8 @@ pub fn calculate_bounce(
 
     match partial_res_y {
         Ok(partial) => {
-            result.y_pos = partial.axis_position;
-            result.y_velocity = partial.axis_velocity;
+            result.position.y = partial.axis_position;
+            result.velocity.y = partial.axis_velocity;
         }
         Err(_e) => {
             return Err(BounceError::CalculationDepthExceeded);
@@ -261,7 +251,7 @@ pub fn calculate_bounce(
 
     println!(
         "Bounce input Y: {}, output Y: {}, input X: {}, output X: {}",
-        p.y_pos, result.y_pos, p.x_pos, result.x_pos
+        p.position.y, result.position.y, p.position.x, result.position.x
     );
     return Ok(result);
 }
@@ -383,41 +373,41 @@ pub fn set_particle_properties_within_bounds(
     new_y_velocity: f32,
 ) {
     let p = particle;
-    p.x_pos = new_x_pos;
-    p.y_pos = new_y_pos;
-    p.x_velocity_m_s = new_x_velocity;
-    p.y_velocity_m_s = new_y_velocity;
+    p.position.x = new_x_pos;
+    p.position.y = new_y_pos;
+    p.velocity.x = new_x_velocity;
+    p.velocity.y = new_y_velocity;
 
-    if SCREEN_HEIGHT < (p.y_pos + PARTICLE_RADIUS_PX).floor() {
+    if SCREEN_HEIGHT < (p.position.y + PARTICLE_RADIUS_PX).floor() {
         println!(
             "DEBUG: particle fully or partially off-screen at Y={}",
-            p.y_pos
+            p.position.y
         );
-        p.y_pos = SCREEN_HEIGHT - PARTICLE_RADIUS_PX;
-        p.y_velocity_m_s = 0.0;
-    } else if 0.0 > (p.y_pos - PARTICLE_RADIUS_PX).ceil() {
+        p.position.y = SCREEN_HEIGHT - PARTICLE_RADIUS_PX;
+        p.velocity.y = 0.0;
+    } else if 0.0 > (p.position.y - PARTICLE_RADIUS_PX).ceil() {
         println!(
             "DEBUG: particle fully or partially off-screen at Y={}",
-            p.y_pos
+            p.position.y
         );
-        p.y_pos = PARTICLE_RADIUS_PX;
-        p.y_velocity_m_s = 0.0;
+        p.position.y = PARTICLE_RADIUS_PX;
+        p.velocity.y = 0.0;
     }
 
-    if SCREEN_WIDTH < (p.x_pos + PARTICLE_RADIUS_PX).floor() {
+    if SCREEN_WIDTH < (p.position.x + PARTICLE_RADIUS_PX).floor() {
         println!(
             "DEBUG: particle fully or partially off-screen at X={}",
-            p.x_pos
+            p.position.x
         );
-        p.x_pos = SCREEN_WIDTH - PARTICLE_RADIUS_PX;
-        p.x_velocity_m_s = 0.0;
-    } else if 0.0 > (p.x_pos - PARTICLE_RADIUS_PX).ceil() {
+        p.position.x = SCREEN_WIDTH - PARTICLE_RADIUS_PX;
+        p.velocity.x = 0.0;
+    } else if 0.0 > (p.position.x - PARTICLE_RADIUS_PX).ceil() {
         println!(
             "DEBUG: particle fully or partially off-screen at X={}",
-            p.x_pos
+            p.position.x
         );
-        p.x_pos = PARTICLE_RADIUS_PX;
-        p.x_velocity_m_s = 0.0;
+        p.position.x = PARTICLE_RADIUS_PX;
+        p.velocity.x = 0.0;
     }
 }
 
@@ -428,9 +418,9 @@ pub fn draw_stats(particles: &Vec<Particle>) {
     let mut sum_x_velocity = 0.0;
     let mut sum_y_positions = 0.0;
     for p in particles {
-        sum_y_velocity += p.y_velocity_m_s;
-        sum_x_velocity += p.x_velocity_m_s;
-        sum_y_positions += p.y_pos;
+        sum_y_velocity += p.velocity.y;
+        sum_x_velocity += p.velocity.x;
+        sum_y_positions += p.position.y;
     }
     let avg_y_velocity = sum_y_velocity / particles.len() as f32;
     let avg_x_velocity = sum_x_velocity / particles.len() as f32;
@@ -473,12 +463,12 @@ pub fn simulation_tick(particles: &mut Vec<Particle>, time_elapsed_seconds: f64)
     for p in particles.iter_mut() {
         println!(
             "Before calculations: Y={}, Y_vel={}, X={}, X_vel={}",
-            p.y_pos, p.y_velocity_m_s, p.x_pos, p.x_velocity_m_s
+            p.position.y, p.velocity.y, p.position.x, p.velocity.x
         );
 
-        p.y_velocity_m_s += calculate_gravity_effect_on_velocity(p, GRAVITY_MS, time_elapsed_seconds);
+        p.velocity.y += calculate_gravity_effect_on_velocity(p, GRAVITY_MS, time_elapsed_seconds);
 
-        p.x_velocity_m_s += calculate_friction_deceleration(p, FRICTION_DYNAMIC_COEFFICIENT);
+        p.velocity.x += calculate_friction_deceleration(p, FRICTION_DYNAMIC_COEFFICIENT);
 
         let bounce_result = calculate_bounce(p, BOUNCE_COEFFICIENT, time_elapsed_seconds);
 
@@ -486,10 +476,10 @@ pub fn simulation_tick(particles: &mut Vec<Particle>, time_elapsed_seconds: f64)
             Ok(bounce_result) => {
                 set_particle_properties_within_bounds(
                     p,
-                    bounce_result.x_pos,
-                    bounce_result.y_pos,
-                    bounce_result.x_velocity,
-                    bounce_result.y_velocity,
+                    bounce_result.position.x,
+                    bounce_result.position.y,
+                    bounce_result.velocity.x,
+                    bounce_result.velocity.y,
                 );
             }
             Err(e) => {
@@ -514,7 +504,7 @@ pub fn simulation_tick(particles: &mut Vec<Particle>, time_elapsed_seconds: f64)
 
         println!(
             "After calculations: Y={}, Y_vel={}, X={}, X_vel={}",
-            p.y_pos, p.y_velocity_m_s, p.x_pos, p.x_velocity_m_s
+            p.position.y, p.velocity.y, p.position.x, p.velocity.x
         );
     }
 }
@@ -524,10 +514,14 @@ pub async fn p_main() {
     request_new_screen_size(SCREEN_WIDTH, SCREEN_HEIGHT);
     let mut particles: Vec<Particle> = Vec::new();
     particles.push(Particle {
-        x_pos: 0.5 * SCREEN_WIDTH,
-        y_pos: convert_meters_to_pixels(72.0 - 50.0, PIXELS_PER_METER), // 0.25 * SCREEN_HEIGHT,
-        x_velocity_m_s: 55.0,
-        y_velocity_m_s: 1.0,
+        position: {
+            XY {
+                x: 0.5 * SCREEN_WIDTH,
+                y: convert_meters_to_pixels(72.0 - 50.0, PIXELS_PER_METER),
+            }
+        }, // 0.25 * SCREEN_HEIGHT,
+        velocity: { XY { x: 55.0, y: 1.0 } },
+        force: 0.0,
     });
 
     // As of 2024-05-09, 2550 is my maximum number of particles for constant >= 140 FPS
@@ -544,10 +538,10 @@ pub async fn p_main() {
     // A negative bounce coefficient makes no sense. Either an object bounces (val >=0) or doesn't (val == 0)
     assert!(BOUNCE_COEFFICIENT >= 0.0);
     // For accurate results, the particle should spawn fully within simulation bounds
-    assert!(particles[0].x_pos >= PARTICLE_RADIUS_PX);
-    assert!(particles[0].y_pos >= PARTICLE_RADIUS_PX);
-    assert!(particles[0].x_pos <= SCREEN_WIDTH - PARTICLE_RADIUS_PX);
-    assert!(particles[0].y_pos <= SCREEN_HEIGHT - PARTICLE_RADIUS_PX);
+    assert!(particles[0].position.x >= PARTICLE_RADIUS_PX);
+    assert!(particles[0].position.y >= PARTICLE_RADIUS_PX);
+    assert!(particles[0].position.x <= SCREEN_WIDTH - PARTICLE_RADIUS_PX);
+    assert!(particles[0].position.y <= SCREEN_HEIGHT - PARTICLE_RADIUS_PX);
 
     let mut last_tick_time = get_time();
 
