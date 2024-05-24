@@ -124,13 +124,13 @@ pub fn calculate_friction_deceleration(
     friction_dynamic_coefficient: f32,
 ) -> f32 {
     // We use the following formula: F=ma
-    // todo: implement static coefficient
+    // Todo: implement static coefficient
 
     if !particle_touching_ground(particle) {
         return 0.0;
     }
 
-    // arbitrarily chosen value used to decide whether something counts as "moving" or not
+    // Arbitrarily chosen value used to decide whether something counts as "moving" or not
     let cutoff_velocity = 0.0001;
     if particle.velocity.x.abs() < cutoff_velocity {
         return 0.0;
@@ -183,7 +183,7 @@ pub fn calculate_bounce(
     bounce_coefficient: f32,
     time_elapsed_seconds: f64,
 ) -> Result<BounceResult, BounceError> {
-    // todo: add bounce interactions between particles
+    // Todo: add bounce interactions between particles
 
     let p = particle;
     let mut result = BounceResult {
@@ -276,7 +276,6 @@ fn bounce_helper(
     /*
         This function helps calculate bounces
     */
-    // TODO: resolve jitter on floor
     // TODO: resolve particle getting stuck on left wall
     let mut res = PartialBounceResult {
         axis_position,
@@ -310,7 +309,7 @@ fn bounce_helper(
     assert!(directional_allowance_1 >= 0.0);
 
     let time_multiplier = time_elapsed_seconds as f32;
-    // signed distance tracking the remaining amount of travel the particle can do in the examined timeframe
+    // Signed distance tracking the remaining amount of travel the particle can do in the examined timeframe
     let mut travel_remaining =
         convert_meters_to_pixels(axis_velocity * time_multiplier, PIXELS_PER_METER);
     let mut new_velocity = axis_velocity;
@@ -340,10 +339,10 @@ fn bounce_helper(
     res.axis_position = axis_position + travel_remaining;
     res.axis_velocity = new_velocity;
 
-    // the break condition in the block above can result in the new position being out of bounds.
+    // The break condition in the block above can result in the new position being out of bounds.
     // TODO: think if this velocity nullification makes sense in the X axis? Doesn't this circumvent friction?
     if res.axis_position > max_allowed_position {
-        // when this condition is true, the object has negigible velocity and is more or less on
+        // When this condition is true, the object has negigible velocity and is more or less on
         // the ground, so we can safely nullify its velocity
         res.axis_position = max_allowed_position;
         res.axis_velocity = 0.0;
@@ -354,15 +353,6 @@ fn bounce_helper(
 
     return Ok(res);
 }
-
-/// Return the input number with decimal places all set to 0
-// pub fn remove_mantissa(num: f32) -> f32 {
-//     if num > 0.0 {
-//         return num.floor();
-//     } else {
-//         return (num + 1.0).floor();
-//     }
-// }
 
 /// Update a particle's properties, while remaining within a range of acceptable values. Also reset the velocity of off-screen particles, and clamp it to be within arena bounds
 pub fn set_particle_properties_within_bounds(

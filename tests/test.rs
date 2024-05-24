@@ -56,7 +56,7 @@ mod tests {
         // This formula may break. The point is that we want any y location at which the particle touches the ground.
         let touching_ground_y_pos = SCREEN_HEIGHT - 1.0;
 
-        // objects not in contact should have 0 friction
+        // Objects not in contact should have 0 friction
         let particle_1 = Particle {
             position: { XY { x: 5.0, y: 5.0 } },
             velocity: { XY { x: 5.0, y: 0.0 } },
@@ -65,7 +65,7 @@ mod tests {
         let result = particle_sim::calculate_friction_deceleration(&particle_1, 0.2);
         assert_eq!(result, 0.0);
 
-        // objects in contact should have friction
+        // Objects in contact should have friction
         let particle_ground = Particle {
             position: {
                 XY {
@@ -79,7 +79,7 @@ mod tests {
         let result = particle_sim::calculate_friction_deceleration(&particle_ground, 0.2);
         assert_eq!(result, -1.96);
 
-        // fast moving objects should have more friction than slow moving objects
+        // Fast moving objects should have more friction than slow moving objects
         let particle_slow = Particle {
             position: {
                 XY {
@@ -104,7 +104,7 @@ mod tests {
         let result_fast = particle_sim::calculate_friction_deceleration(&particle_fast, 0.2);
         assert!(result_fast.abs() > result_slow.abs());
 
-        // objects in contact should have friction regardless of direction
+        // Objects in contact should have friction regardless of direction
         let particle_ground = Particle {
             position: {
                 XY {
@@ -209,18 +209,20 @@ mod tests {
         let initial_position_x = 0.5 * SCREEN_WIDTH;
         let particle = Particle {
             position: {
+                // We want the particle not already colliding on spawn
                 XY {
                     x: initial_position_x,
                     y: 0.5 * SCREEN_HEIGHT,
                 }
-            }, // we want the particle not already colliding on spawn
+            },
             velocity: {
                 XY {
                     x: 0.0,
                     y: initial_y_velocity,
                 }
-            }, // we want the particle not already colliding on spawn
-            force: 0.0, // we want the ball to hit the ground within 1 tick
+            },
+            // We want the ball to hit the ground within 1 tick
+            force: 0.0,
         };
         let result = particle_sim::calculate_bounce(&particle, 0.9, 1.0).unwrap();
 
@@ -256,14 +258,14 @@ mod tests {
             convert_pixels_to_meters(-0.5 * SCREEN_WIDTH - 1.0, PIXELS_PER_METER);
         let initial_position_y = 0.5 * SCREEN_WIDTH;
         let particle = Particle {
-            // we want the particle not already colliding on spawn
+            // We want the particle not already colliding on spawn
             position: {
                 XY {
                     x: 0.5 * SCREEN_WIDTH,
                     y: initial_position_y,
                 }
             },
-            // we want the ball to hit the ground within 1 tick
+            // We want the ball to hit the ground within 1 tick
             velocity: {
                 XY {
                     x: initial_x_velocity,
@@ -313,7 +315,7 @@ mod tests {
                     y: 0.5 * SCREEN_HEIGHT,
                 }
             },
-            // we want the ball to it the side within 1 tick force: 0.0,
+            // We want the ball to it the side within 1 tick
             velocity: {
                 XY {
                     x: initial_x_velocity,
@@ -411,14 +413,14 @@ mod tests {
         // Check that bouncing at the very edge of the arena does not bounce it out of bounds
         let initial_position_y = SCREEN_HEIGHT - PARTICLE_RADIUS_PX - 0.0001;
         let particle = Particle {
-            // we want the particle ever so slightly in bounds
+            // We want the particle ever so slightly in bounds
             position: {
                 XY {
                     x: 0.5 * SCREEN_WIDTH,
                     y: initial_position_y,
                 }
             },
-            // we want a negligible velocity, which is greater than the distance to the arena edge, but
+            // We want a negligible velocity, which is greater than the distance to the arena edge, but
             // still tiny enough that the programmer may be tempted not to calculate it
             velocity: { XY { x: 0.0, y: 0.0005 } },
             force: 0.0,
@@ -437,7 +439,7 @@ mod tests {
                     y: 0.5 * SCREEN_HEIGHT,
                 }
             },
-            // we want a negligible velocity, one which is beyond our velocity cut-off
+            // We want a negligible velocity, one which is beyond our velocity cut-off
             velocity: { XY { x: -0.0005, y: 0.0 } },
             force: 0.0,
         };
