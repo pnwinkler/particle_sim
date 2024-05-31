@@ -11,9 +11,6 @@ pub const SCREEN_HEIGHT: f32 = 720.0;
 // The default diameter in pixels of a particle
 pub const PARTICLE_RADIUS_PX: f32 = 10.0;
 
-// The weight of each particle in kilograms
-const PARTICLE_MASS_KG: f32 = 1.0;
-
 // The default color of a particle
 const PARTICLE_COLOR: Color = RED;
 
@@ -138,8 +135,8 @@ pub fn calculate_friction_deceleration(
 
     // friction coefficient * mass * gravity
     let f = friction_dynamic_coefficient;
-    let friction_force = f * PARTICLE_MASS_KG * GRAVITY_MS;
-    let friction_deceleration = friction_force / PARTICLE_MASS_KG;
+    let friction_force = f * particle.mass * GRAVITY_MS;
+    let friction_deceleration = friction_force / particle.mass;
 
     // The -1.0 multipliers let us oppose the object's velocity
     if friction_deceleration > particle.velocity.x.abs() {
@@ -509,6 +506,7 @@ pub async fn p_main() {
         }, // 0.25 * SCREEN_HEIGHT,
         velocity: XY { x: 55.0, y: 1.0 },
         force: XY { x: 0.0, y: 0.0 },
+        mass: 1.0,
     });
 
     // As of 2024-05-09, 2550 is my maximum number of particles for constant >= 140 FPS
