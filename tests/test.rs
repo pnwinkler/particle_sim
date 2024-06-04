@@ -1,56 +1,117 @@
 #[cfg(test)]
 mod tests {
+    use colliders;
     use objects::*;
-    use particle_sim::*;
+    use particle_sim::{colliders::TestCollision, *};
 
     #[test]
-    fn test_does_circle_intersect() {
+    fn test_do_spheres_intersect() {
         // TODO: update function to work with spheres instead
-        // Test if the following points intersect our imaginary circle
-        // let result = does_circle_intersect(
-        //     XYZ {
-        //         x: 0.0,
-        //         y: 0.0,
-        //         z: 0.0,
-        //     },
-        //     5.0,
-        //     XYZ {
-        //         x: 1.0,
-        //         y: 1.0,
-        //         z: 0.0,
-        //     },
-        // );
-        // assert!(result == true);
-        //
-        // let result = does_circle_intersect(
-        //     XYZ {
-        //         x: 1.0,
-        //         y: 1.0,
-        //         z: 0.0,
-        //     },
-        //     5.0,
-        //     XYZ {
-        //         x: 6.0,
-        //         y: 1.0,
-        //         z: 0.0,
-        //     },
-        // );
-        // assert!(result == true);
-        //
-        // let result = does_circle_intersect(
-        //     XYZ {
-        //         x: 50.0,
-        //         y: 50.0,
-        //         z: 0.0,
-        //     },
-        //     5.0,
-        //     XYZ {
-        //         x: 50.0,
-        //         y: 55.1,
-        //         z: 0.0,
-        //     },
-        // );
-        // assert!(result == false);
+        // Test if our sphere collision function can correctly determine when spheres intersect
+
+        // Test with 0 radius
+        let sphere_1 = colliders::ColliderType::SPHERE {
+            center: XYZ {
+                x: 20.0,
+                y: 20.0,
+                z: 20.0,
+            },
+            radius: 5.0,
+        };
+        let sphere_2 = colliders::ColliderType::SPHERE {
+            center: XYZ {
+                x: 20.0,
+                y: 20.0,
+                z: 20.0,
+            },
+            radius: 0.0,
+        };
+        let result = sphere_1.test_collision(&sphere_2);
+        // Both spheres should collide at sphere 2's spawn, with the furthest point in each sphere being that spawn
+        // (because sphere_2's radius is 0.0)
+        assert!(result.has_collision == true);
+        assert!(result.a.x == 20.0);
+        assert!(result.a.y == 20.0);
+        assert!(result.a.z == 20.0);
+        assert!(result.b.x == 20.0);
+        assert!(result.b.y == 20.0);
+        assert!(result.b.z == 20.0);
+
+        // Test that non-colliding spheres are not considered to be colliding
+        let sphere_3 = colliders::ColliderType::SPHERE {
+            center: XYZ {
+                x: 20.0,
+                y: 20.0,
+                z: 20.0,
+            },
+            radius: 5.0,
+        };
+        let sphere_4 = colliders::ColliderType::SPHERE {
+            center: XYZ {
+                x: 10.0,
+                y: 10.0,
+                z: 10.0,
+            },
+            radius: 4.0,
+        };
+        let result = sphere_3.test_collision(&sphere_4);
+        // for non-intersecting spheres, there's no point testing a and b
+        assert!(result.has_collision == false);
+
+        // Assert that a collision in only one axis is still registered as a collision
+        let sphere_5 = colliders::ColliderType::SPHERE {
+            center: XYZ {
+                x: 20.0,
+                y: 20.0,
+                z: 20.0,
+            },
+            radius: 1.0,
+        };
+        let sphere_6 = colliders::ColliderType::SPHERE {
+            center: XYZ {
+                x: 17.0,
+                y: 17.0,
+                z: 19.0,
+            },
+            radius: 2.0,
+        };
+        let result = sphere_5.test_collision(&sphere_6);
+        assert!(result.has_collision == true);
+        // todo: break this test into two?
+        assert!(result.a.z == 19.0);
+        // The center is the innermost point that a sphere (A) can intersect into another sphere (B).
+        // Therefore, if A intersects past that point, we still expect the point furthest into B to be
+        // B's center
+        assert!(result.b.z == 20.0);
+
+        // Assert that a sphere fully containing another sphere is:
+        // 1) registered as a collision
+        // 2) that the furthest point of the larger sphere into the smaller sphere is the smaller 
+        // sphere's center
+        let sphere_7 = colliders::ColliderType::SPHERE {
+            center: XYZ {
+                x: 20.0,
+                y: 20.0,
+                z: 20.0,
+            },
+            radius: 10.0,
+        };
+        let sphere_8 = colliders::ColliderType::SPHERE {
+            center: XYZ {
+                x: 21.0,
+                y: 21.0,
+                z: 21.0,
+            },
+            radius: 2.0,
+        };
+        let result = sphere_7.test_collision(&sphere_8);
+        assert!(result.has_collision == true);
+        // the sphere A, containing the other sphere B, should have B's center as A's furthermost
+        // incursion into B's space
+        assert!(result.a.z == 21.0);
+        // the smaller sphere should choose the point closest to the center of the other sphere, that
+        // it can still reach
+        assert!(result.b.z == 20.0);
     }
 
     #[test]
