@@ -1,12 +1,16 @@
 //! A realistic particle simulator
 
+pub mod colliders;
 pub mod objects;
+pub mod quaternion;
 use crate::objects::*;
 use macroquad::prelude::*;
 use std::fmt;
 
 pub const SCREEN_WIDTH: f32 = 1080.0;
 pub const SCREEN_HEIGHT: f32 = 720.0;
+// TODO: implement behavior for Z axis
+// pub const SCREEN_DEPTH: f32 = 720.0;
 
 // The default diameter in pixels of a particle
 pub const PARTICLE_RADIUS_PX: f32 = 10.0;
@@ -69,14 +73,14 @@ struct CalculationDepthExceeded;
 
 /// Returns true if the point falls within a circle, else false
 /// The following formula is used: a^2 + b^2 = c^2. If c <= radius, then the point is considered to be within the circle
-pub fn does_circle_intersect(circle_center: XY, circle_radius: f32, point: XY) -> bool {
-    // tolerance is to account for floating point imprecision
-    let tolerance = 0.0001;
-    let a_2 = (circle_center.x - point.x).powf(2.0);
-    let b_2 = (circle_center.y - point.y).powf(2.0);
-    println!("{},{},{}", a_2, b_2, circle_radius.powf(2.0));
-    return (circle_radius.powf(2.0) + tolerance) >= (a_2 + b_2);
-}
+// pub fn does_circle_intersect(circle_center: XYZ, circle_radius: f32, point: XYZ) -> bool {
+//     // tolerance is to account for floating point imprecision
+//     let tolerance = 0.0001;
+//     let a_2 = (circle_center.x - point.x).powf(2.0);
+//     let b_2 = (circle_center.y - point.y).powf(2.0);
+//     println!("{},{},{}", a_2, b_2, circle_radius.powf(2.0));
+//     return (circle_radius.powf(2.0) + tolerance) >= (a_2 + b_2);
+// }
 
 pub fn draw_particles(particles: &Vec<Particle>) {
     for p in particles {
@@ -150,21 +154,21 @@ pub fn calculate_friction_deceleration(
 
 /// Calculate the effect of gravity in meters over the elapsed timeframe, if it's not resting on any surface
 /// (currently we only check for the ground)
-pub fn calculate_gravity_effect_on_velocity(
-    particle: &Particle,
-    gravity_acceleration_ms: f32,
-    time_elapsed_seconds: f64,
-) -> f32 {
-    // todo: add checks for if particle is resting on another object
-    if particle_touching_ground(particle) {
-        return 0.0;
-    }
-    return gravity_acceleration_ms * time_elapsed_seconds as f32;
-}
+// pub fn calculate_gravity_effect_on_velocity(
+//     particle: &Particle,
+//     gravity_acceleration_ms: f32,
+//     time_elapsed_seconds: f64,
+// ) -> f32 {
+//     // todo: add checks for if particle is resting on another object
+//     if particle_touching_ground(particle) {
+//         return 0.0;
+//     }
+//     return gravity_acceleration_ms * time_elapsed_seconds as f32;
+// }
 
 pub struct BounceResult {
-    pub position: XY,
-    pub velocity: XY,
+    pub position: XYZ,
+    pub velocity: XYZ,
 }
 
 /// Calculate and return the post-bounce state of the input particle.
@@ -184,13 +188,15 @@ pub fn calculate_bounce(
 
     let p = particle;
     let mut result = BounceResult {
-        position: XY {
+        position: XYZ {
             x: p.position.x,
             y: p.position.y,
+            z: p.position.z,
         },
-        velocity: XY {
+        velocity: XYZ {
             x: p.velocity.x,
             y: p.velocity.y,
+            z: p.velocity.z,
         },
     };
 
@@ -448,11 +454,22 @@ pub fn draw_stats(particles: &Vec<Particle>) {
 pub fn simulation_tick(particles: &mut Vec<Particle>, time_elapsed_seconds: f64) {
     for p in particles.iter_mut() {
         println!(
-            "Before calculations: Y={}, Y_vel={}, X={}, X_vel={}",
-            p.position.y, p.velocity.y, p.position.x, p.velocity.x
+            "Before calculations: X={}, X_vel={}, Y={}, Y_vel={}",
+            p.position.x, p.velocity.x, p.position.y, p.velocity.y
         );
 
-        p.velocity.y += calculate_gravity_effect_on_velocity(p, GRAVITY_MS, time_elapsed_seconds);
+        // TODO: resume. Implement friction such that I can make gravity not be a global constant
+        p.force.y += p.mass * GRAVITY_MS;
+        p.velocity += &p.force / p.mass * time_elapsed_seconds as f32;
+        p.position += &p.velocity * time_elapsed_seconds as f32;
+        println!("{}; {}; {}; {}", p.force, p.velocity, p.position, p.force);
+        p.force = XYZ {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        };
+
+        // p.velocity.y += calculate_gravity_effect_on_velocity(p, GRAVITY_MS, time_elapsed_seconds);
 
         p.velocity.x += calculate_friction_deceleration(p, FRICTION_DYNAMIC_COEFFICIENT);
 
@@ -495,17 +512,38 @@ pub fn simulation_tick(particles: &mut Vec<Particle>, time_elapsed_seconds: f64)
     }
 }
 
+// FPS limiter copied from https://github.com/not-fl3/macroquad/issues/380#issuecomment-1026728046
+// fn limit_fps() {
+//     let minimum_frame_time = 1. / 1.; // 60 FPS
+//     let frame_time = get_frame_time();
+//     println!("Frame time: {}ms", frame_time * 1000.);
+//     if frame_time < minimum_frame_time {
+//         let time_to_sleep = (minimum_frame_time - frame_time) * 1000.;
+//         println!("Sleep for {}ms", time_to_sleep);
+//         std::thread::sleep(std::time::Duration::from_millis(time_to_sleep as u64));
+//     }
+// }
+
 pub async fn p_main() {
     // Setup
     request_new_screen_size(SCREEN_WIDTH, SCREEN_HEIGHT);
     let mut particles: Vec<Particle> = Vec::new();
     particles.push(Particle {
-        position: XY {
+        position: XYZ {
             x: 0.5 * SCREEN_WIDTH,
             y: convert_meters_to_pixels(72.0 - 50.0, PIXELS_PER_METER),
-        }, // 0.25 * SCREEN_HEIGHT,
-        velocity: XY { x: 55.0, y: 1.0 },
-        force: XY { x: 0.0, y: 0.0 },
+            z: 0.0,
+        },
+        velocity: XYZ {
+            x: 55.0,
+            y: 1.0,
+            z: 0.0,
+        },
+        force: XYZ {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        },
         mass: 1.0,
     });
 
@@ -535,16 +573,6 @@ pub async fn p_main() {
         let now = get_time();
         let time_elapsed = now - last_tick_time;
         simulation_tick(&mut particles, time_elapsed);
-
-        // FPS limiter copied from https://github.com/not-fl3/macroquad/issues/380#issuecomment-1026728046
-        // let minimum_frame_time = 1. / 1.; // 60 FPS
-        // let frame_time = get_frame_time();
-        // println!("Frame time: {}ms", frame_time * 1000.);
-        // if frame_time < minimum_frame_time {
-        //     let time_to_sleep = (minimum_frame_time - frame_time) * 1000.;
-        //     println!("Sleep for {}ms", time_to_sleep);
-        //     std::thread::sleep(std::time::Duration::from_millis(time_to_sleep as u64));
-        // }
 
         clear_background(BLACK);
         draw_particles(&particles);

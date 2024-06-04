@@ -2,109 +2,150 @@ use std::ops;
 use std::fmt;
 
 pub struct Particle {
-    pub position: XY,
+    pub position: XYZ,
     // signed velocity in m/s^2 in the X and Y axes
-    pub velocity: XY,
+    pub velocity: XYZ,
     // signed force in Newtons in the X and Y axes
-    pub force: XY,
+    pub force: XYZ,
     // mass in kilograms
     pub mass: f32,
 }
 
-pub struct XY {
+#[derive(Debug, Copy, Clone)]
+pub struct XYZ {
     pub x: f32,
     pub y: f32,
+    pub z: f32,
 }
 
-impl fmt::Display for XY {
+impl fmt::Display for XYZ {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "XY(X={},Y={})", self.x, self.y)
+        write!(f, "XY(X={},Y={},Z={})", self.x, self.y, self.z)
     }
 }
 
-impl ops::Add<XY> for &XY {
-    type Output = XY;
+// todo: reduce duplication
+impl ops::Add<XYZ> for &XYZ {
+    type Output = XYZ;
 
-    fn add(self, rhs: XY) -> XY {
-        return XY {
+    fn add(self, rhs: XYZ) -> XYZ {
+        return XYZ {
             x: self.x + rhs.x,
             y: self.y + rhs.y,
+            z: self.z + rhs.z,
         };
     }
 }
+// impl ops::Add<XYZ> for &XYZ {
+//     type Output = XYZ;
+//
+//     fn add(self, rhs: f32) -> XYZ {
+//         return XYZ {
+//             x: self.x + rhs.x,
+//             y: self.y + rhs.y,
+//             z: self.z + rhs.z,
+//         };
+//     }
+// }
 
-impl ops::AddAssign<XY> for XY {
-    fn add_assign(&mut self, rhs: XY) {
+impl ops::AddAssign<XYZ> for XYZ {
+    fn add_assign(&mut self, rhs: XYZ) {
         self.x += rhs.x;
         self.y += rhs.y;
     }
 }
 
-impl ops::Div<XY> for &XY {
-    type Output = XY;
+impl ops::Sub<XYZ> for &XYZ {
+    type Output = XYZ;
 
-    fn div(self, rhs: XY) -> XY {
-        return XY {
+    fn sub(self, rhs: XYZ) -> XYZ {
+        return XYZ {
+            x: self.x - rhs.x,
+            y: self.y - rhs.y,
+            z: self.z - rhs.z,
+        };
+    }
+}
+
+impl ops::SubAssign<XYZ> for XYZ {
+    fn sub_assign(&mut self, rhs: XYZ) {
+        self.x -= rhs.x;
+        self.y -= rhs.y;
+    }
+}
+
+impl ops::Div<XYZ> for &XYZ {
+    type Output = XYZ;
+
+    fn div(self, rhs: XYZ) -> XYZ {
+        return XYZ {
             x: self.x / rhs.x,
             y: self.y / rhs.y,
+            z: self.z / rhs.z,
         };
     }
 }
 
-impl ops::Div<f32> for &XY {
-    type Output = XY;
+impl ops::Div<f32> for &XYZ {
+    type Output = XYZ;
 
-    fn div(self, rhs: f32) -> XY {
-        return XY {
+    fn div(self, rhs: f32) -> XYZ {
+        return XYZ {
             x: self.x / rhs,
             y: self.y / rhs,
+            z: self.z / rhs,
         };
     }
 }
 
-impl ops::DivAssign<XY> for XY {
-    fn div_assign(&mut self, rhs: XY) {
+impl ops::DivAssign<XYZ> for XYZ {
+    fn div_assign(&mut self, rhs: XYZ) {
         self.x /= rhs.x;
         self.y /= rhs.y;
+        self.z /= rhs.z;
     }
 }
 
-impl ops::DivAssign<f32> for XY {
+impl ops::DivAssign<f32> for XYZ {
     fn div_assign(&mut self, rhs: f32) {
         self.x /= rhs;
         self.y /= rhs;
+        self.z /= rhs;
     }
 }
 
-impl ops::Mul<XY> for &XY {
-    type Output = XY;
+impl ops::Mul<XYZ> for &XYZ {
+    type Output = XYZ;
 
-    fn mul(self, rhs: XY) -> XY {
-        return XY {
+    fn mul(self, rhs: XYZ) -> XYZ {
+        return XYZ {
             x: self.x * rhs.x,
             y: self.y * rhs.y,
+            z: self.z * rhs.z,
         };
     }
 }
 
-impl ops::Mul<f32> for XY {
-    type Output = XY;
+impl ops::Mul<f32> for XYZ {
+    type Output = XYZ;
 
-    fn mul(self, rhs: f32) -> XY {
-        return XY {
+    fn mul(self, rhs: f32) -> XYZ {
+        return XYZ {
             x: self.x * rhs,
             y: self.y * rhs,
+            z: self.z * rhs,
         };
     }
 }
 
-impl ops::Mul<f32> for &XY {
-    type Output = XY;
+impl ops::Mul<f32> for &XYZ {
+    type Output = XYZ;
 
-    fn mul(self, rhs: f32) -> XY {
-        return XY {
+    fn mul(self, rhs: f32) -> XYZ {
+        return XYZ {
             x: self.x * rhs,
             y: self.y * rhs,
+            z: self.z * rhs,
         };
     }
 }
