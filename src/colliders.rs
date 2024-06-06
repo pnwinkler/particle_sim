@@ -70,7 +70,7 @@ impl TestCollision for ColliderType {
 // }
 
 /// Returns the CollisionPoints for the intersection of two spheres
-/// The following formula is used: a^2 + b^2 = c^2. If c <= radius, then the point is considered to be within the circle
+/// The furthest collision point of a sphere A into another sphere B, is B's center
 fn sphere_sphere_collision_points(
     sphere_1_center: &XYZ,
     sphere_1_radius: &f32,
@@ -84,31 +84,14 @@ fn sphere_sphere_collision_points(
         z: 0.0,
     };
 
-    let cx_diff = sphere_1_center.x - sphere_2_center.x;
-    let cy_diff = sphere_1_center.y - sphere_2_center.y;
-    let cz_diff = sphere_1_center.z - sphere_2_center.z;
+    let larger_radius = f32::max(*sphere_1_radius, *sphere_2_radius);
+    let smaller_radius = f32::min(*sphere_1_radius, *sphere_2_radius);
 
-    // todo: tidy up
-    let larger_radius = if sphere_1_radius > sphere_2_radius {
-        sphere_1_radius
-    } else {
-        sphere_2_radius
-    };
+    let x_collision = (sphere_1_center.x - sphere_2_center.x) < larger_radius;
+    let y_collision = (sphere_1_center.y - sphere_2_center.y) < larger_radius;
+    let z_collision = (sphere_1_center.z - sphere_2_center.z) < larger_radius;
 
-    let smaller_radius = if sphere_1_radius < sphere_2_radius {
-        sphere_1_radius
-    } else {
-        sphere_2_radius
-    };
-
-    let x_collision = cx_diff.abs() < *larger_radius;
-    let y_collision = cy_diff.abs() < *larger_radius;
-    let z_collision = cz_diff.abs() < *larger_radius;
-
-    // TODO: add min and maxes here
     let s1_furthest_x_into_s2 = if x_collision && sphere_1_center.x <= sphere_2_center.x {
-        // The furthest collision point of sphere A into sphere B is sphere B's center
-        // Hence the min and max functions
         f32::min(sphere_1_center.x + smaller_radius, sphere_2_center.x)
     } else if x_collision && sphere_1_center.x > sphere_2_center.x {
         f32::max(sphere_1_center.x - smaller_radius, sphere_2_center.x)
@@ -117,8 +100,6 @@ fn sphere_sphere_collision_points(
     };
 
     let s1_furthest_y_into_s2 = if y_collision && sphere_1_center.y <= sphere_2_center.y {
-        // The furthest collision point of sphere A into sphere B is sphere B's center
-        // Hence the min and may functions
         f32::min(sphere_1_center.y + smaller_radius, sphere_2_center.y)
     } else if y_collision && sphere_1_center.y > sphere_2_center.y {
         f32::max(sphere_1_center.y - smaller_radius, sphere_2_center.y)
@@ -177,6 +158,4 @@ fn sphere_sphere_collision_points(
     };
     println!("{}", res);
     return res;
-
-    // return (sphere_1_radius.powf(2.0) + tolerance) >= (a_2 + b_2);
 }
