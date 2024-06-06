@@ -6,10 +6,9 @@ mod tests {
 
     #[test]
     fn test_do_spheres_intersect() {
-        // TODO: update function to work with spheres instead
         // Test if our sphere collision function can correctly determine when spheres intersect
 
-        // Test with 0 radius
+        // Test with 0 radius. We expect this to count as a collision
         let sphere_1 = colliders::ColliderType::SPHERE {
             center: XYZ {
                 x: 20.0,
@@ -37,7 +36,7 @@ mod tests {
         assert!(result.b.y == 20.0);
         assert!(result.b.z == 20.0);
 
-        // Test that non-colliding spheres are not considered to be colliding
+        // Assert that non-colliding spheres are correctly identified as not colliding
         let sphere_3 = colliders::ColliderType::SPHERE {
             center: XYZ {
                 x: 20.0,
@@ -55,10 +54,12 @@ mod tests {
             radius: 4.0,
         };
         let result = sphere_3.test_collision(&sphere_4);
-        // for non-intersecting spheres, there's no point testing a and b
         assert!(result.has_collision == false);
+        // There may be more values in our result object, but for non-colliding spheres, 
+        // we don't care about them
 
-        // Assert that a collision in only one axis is still registered as a collision
+        // Assert that a collision in only one axis is still registered as a collision,
+        // and the A and B values are as expected
         let sphere_5 = colliders::ColliderType::SPHERE {
             center: XYZ {
                 x: 20.0,
@@ -77,16 +78,15 @@ mod tests {
         };
         let result = sphere_5.test_collision(&sphere_6);
         assert!(result.has_collision == true);
-        // todo: break this test into two?
         assert!(result.a.z == 19.0);
         // The center is the innermost point that a sphere (A) can intersect into another sphere (B).
         // Therefore, if A intersects past that point, we still expect the point furthest into B to be
         // B's center
         assert!(result.b.z == 20.0);
 
-        // Assert that a sphere fully containing another sphere is:
-        // 1) registered as a collision
-        // 2) that the furthest point of the larger sphere into the smaller sphere is the smaller 
+        // Assert that, when a sphere fully contains another sphere:
+        // 1) it's registered as a collision
+        // 2) the furthest point of the larger sphere into the smaller sphere is the smaller 
         // sphere's center
         let sphere_7 = colliders::ColliderType::SPHERE {
             center: XYZ {
