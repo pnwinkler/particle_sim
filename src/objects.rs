@@ -1,5 +1,5 @@
-use std::ops;
 use std::fmt;
+use std::ops;
 
 pub struct Particle {
     pub position: XYZ,
@@ -11,7 +11,7 @@ pub struct Particle {
     pub mass: f32,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, PartialEq)]
 pub struct XYZ {
     pub x: f32,
     pub y: f32,
@@ -55,7 +55,7 @@ impl ops::AddAssign<XYZ> for XYZ {
     }
 }
 
-impl ops::Sub<XYZ> for &XYZ {
+impl ops::Sub<XYZ> for XYZ {
     type Output = XYZ;
 
     fn sub(self, rhs: XYZ) -> XYZ {
@@ -147,5 +147,41 @@ impl ops::Mul<f32> for &XYZ {
             y: self.y * rhs,
             z: self.z * rhs,
         };
+    }
+}
+
+pub trait NormalizeXyz {
+    fn normalize(&self) -> XYZ;
+}
+
+impl NormalizeXyz for XYZ {
+    fn normalize(&self) -> XYZ {
+        let vec_length = self.magnitude();
+        if vec_length == 0.0 {
+            return XYZ {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            };
+        }
+        return XYZ {
+            x: self.x / vec_length,
+            y: self.y / vec_length,
+            z: self.z / vec_length,
+        };
+    }
+}
+
+pub trait MagnitudeXyz {
+    fn magnitude(&self) -> f32;
+}
+
+impl MagnitudeXyz for XYZ {
+    fn magnitude(&self) -> f32 {
+        let res = f32::sqrt((self.x * self.x) + (self.y * self.y) + (self.z * self.z));
+        if res.is_nan() {
+            return 0.0;
+        }
+        return res;
     }
 }
