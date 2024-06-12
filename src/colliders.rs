@@ -32,6 +32,8 @@ struct Transform {
 
 pub enum ColliderType {
     SPHERE { center: XYZ, radius: f32 },
+    /// Remember to normalize this. We don't do it automatically, in order to avoid accidentally normalizing twice
+    /// which would magnify potential floating point imprecision.
     PLANE { normal: XYZ, distance: f32 },
 }
 
