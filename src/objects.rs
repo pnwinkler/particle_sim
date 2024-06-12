@@ -154,20 +154,30 @@ pub trait NormalizeXyz {
     fn normalize(&self) -> XYZ;
 }
 
+/// Normalizes the struct. In the event that the struct's values are all 0, return a default
+/// with equal values in all directions.
 impl NormalizeXyz for XYZ {
     fn normalize(&self) -> XYZ {
         let vec_length = self.magnitude();
-        if vec_length == 0.0 {
+        if vec_length != 0.0 {
             return XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
+                x: self.x / vec_length,
+                y: self.y / vec_length,
+                z: self.z / vec_length,
             };
         }
+
+        // Use a default, to avoid dividing by zero
+        let vl = XYZ {
+            x: 1.0,
+            y: 1.0,
+            z: 1.0,
+        }
+        .magnitude();
         return XYZ {
-            x: self.x / vec_length,
-            y: self.y / vec_length,
-            z: self.z / vec_length,
+            x: 1.0 / vl,
+            y: 1.0 / vl,
+            z: 1.0 / vl,
         };
     }
 }
