@@ -33,7 +33,7 @@ struct Transform {
 pub enum ColliderType {
     SPHERE { center: XYZ, radius: f32 },
     /// Remember to normalize this. We don't do it automatically, in order to avoid accidentally normalizing twice
-    /// which would magnify potential floating point imprecision.
+    /// which could magnify potential floating point imprecision.
     PLANE { normal: XYZ, distance: f32 },
 }
 
@@ -126,6 +126,7 @@ fn dot_product(a: XYZ, b: XYZ) -> f32 {
     return dot_a_b;
 }
 
+/// Determine all collision points between a sphere and plane, if any.
 fn plane_sphere_collision_points(
     plane_normal: XYZ,
     plane_distance: f32,
@@ -133,23 +134,22 @@ fn plane_sphere_collision_points(
     sphere_radius: f32,
 ) -> CollisionPoints {
     let p_normal = plane_normal.normalize();
-    println!("normal {}", p_normal);
-    println!("plane_distance {}", plane_distance);
     let on_plane = p_normal * plane_distance;
-    println!("on_plane {}", on_plane);
+    // println!("Plane normal {}, \n\tdistance {}, \n\ton_plane {}", p_normal, plane_distance, on_plane);
+    // println!("Sphere center {}, \n\tsphere radius {}", sphere_center, sphere_radius);
 
     // distance from center of sphere to plane surface
-    // https://github.com/IainWinter/IwEngine/blob/3e2052855fea85718b7a499a7b1a3befd49d812b/IwEngine/include/iw/physics/impl/TestCollision.h#L53
+    // println!("Sphere_center - on_plane \n\t= {} - {} \n\t= {}", sphere_center, on_plane, sphere_center - on_plane);
     let distance = dot_product(sphere_center - on_plane, p_normal);
-    println!("distance {}", distance);
+    // println!("Distance between objects {}", distance);
 
-    let has_collision = distance < sphere_radius;
-    println!("has_collision {}", has_collision);
+    let has_collision = f32::abs(distance) <= sphere_radius;
+    // println!("Has collision {}", has_collision);
 
     let a = sphere_center - p_normal * sphere_radius;
     let b = sphere_center - p_normal * distance;
+    // println!("B = {}\nA = {}", b, a);
 
-    // println!("xc={},yc={},zc={}", x_collision, y_collision, z_collision);
     let res = CollisionPoints {
         a,
         b,
@@ -157,7 +157,7 @@ fn plane_sphere_collision_points(
         depth: sphere_radius - distance,
         has_collision,
     };
-    println!("{}", res);
+    // println!("{}", res);
     return res;
 }
 
