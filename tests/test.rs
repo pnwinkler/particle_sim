@@ -4,18 +4,27 @@ mod tests {
     use objects::*;
     use particle_sim::{colliders::TestCollision, *};
 
+    // After normalizing a vector of 3 equal dimensions, the normalized vector should have
+    // this value for all 3 dimensions.
+    const BALANCED_NORMAL: f32 = 0.57735026;
+
     #[test]
-    fn test_xyz_normalize_does_not_return_nan() {
-        // We prefer 0.0 to nan
+    fn test_xyz_magnitude_on_nonzero_input() {
         let loc_1 = XYZ {
-            x: 0.0,
-            y: 0.0,
-            z: 0.0,
+            x: 5.0,
+            y: 5.0,
+            z: 5.0,
         };
-        let result = loc_1.normalize();
-        assert_eq!(result.x, 0.0);
-        assert_eq!(result.y, 0.0);
-        assert_eq!(result.z, 0.0);
+        let result = loc_1.magnitude();
+        assert_eq!(result, f32::sqrt(75.0));
+
+        let loc_1 = XYZ {
+            x: -5.0,
+            y: -5.0,
+            z: -5.0,
+        };
+        let result = loc_1.magnitude();
+        assert_eq!(result, f32::sqrt(75.0));
     }
 
     #[test]
@@ -31,9 +40,60 @@ mod tests {
     }
 
     #[test]
-    fn test_sphere_sphere_intersection() {
-        // Test if our sphere collision function can correctly determine when spheres intersect
+    fn test_xyz_normalize_on_nonzero_input() {
+        // Assert that unequal proportions are preserved
+        let loc_1 = XYZ {
+            x: 1000.0,
+            y: 0.0,
+            z: 0.0,
+        };
+        let result = loc_1.normalize();
+        assert_eq!(result.x, 1.0);
+        assert_eq!(result.y, 0.0);
+        assert_eq!(result.z, 0.0);
 
+        // Assert that equal proportions are preserved
+        let loc_1 = XYZ {
+            x: 5.0,
+            y: 5.0,
+            z: 5.0,
+        };
+        let result = loc_1.normalize();
+        assert_eq!(result.x, BALANCED_NORMAL);
+        assert_eq!(result.y, BALANCED_NORMAL);
+        assert_eq!(result.z, BALANCED_NORMAL);
+
+        let loc_1 = XYZ {
+            x: 1.0,
+            y: 10.0,
+            z: 0.0,
+        };
+        let result = loc_1.normalize();
+        // todo: determine why there are more significant digits returned for x than for y?
+        let x_expected = 0.099503726;
+        let y_expected = 0.9950372;
+        assert_eq!(result.x, x_expected);
+        assert_eq!(result.y, y_expected);
+        assert_eq!(result.z, 0.0);
+    }
+
+    #[test]
+    fn test_xyz_normalize_raises_on_all_zeroes_vector() {
+        // It's not possible to normalize a vector where all 3 elements are 0 (can't divide by 0)
+        // so we'll assume the user meant something like (1,1,1), where all elements are equal and non-zero
+        let loc_1 = XYZ {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        };
+        let result = loc_1.normalize();
+        assert_eq!(result.x, BALANCED_NORMAL);
+        assert_eq!(result.y, BALANCED_NORMAL);
+        assert_eq!(result.z, BALANCED_NORMAL);
+    }
+
+    #[test]
+    fn test_sphere_sphere_intersection_sphere_zero_radius() {
         // Test with 0 radius. We expect this to count as a collision
         let sphere_1 = colliders::ColliderType::SPHERE {
             center: XYZ {
@@ -63,10 +123,13 @@ mod tests {
         assert!(result.b.z == 20.0);
         // if we have a radius of 0, we can't have a penetration depth > 0.0
         assert_eq!(result.depth, 0.0);
-        assert_eq!(result.normal.x, 0.0);
-        assert_eq!(result.normal.y, 0.0);
-        assert_eq!(result.normal.z, 0.0);
+        assert_eq!(result.normal.x, BALANCED_NORMAL);
+        assert_eq!(result.normal.y, BALANCED_NORMAL);
+        assert_eq!(result.normal.z, BALANCED_NORMAL);
+    }
 
+    #[test]
+    fn test_sphere_sphere_intersection_no_collision() {
         // Assert that non-colliding spheres are correctly identified as not colliding
         let sphere_3 = colliders::ColliderType::SPHERE {
             center: XYZ {
@@ -88,7 +151,10 @@ mod tests {
         assert!(result.has_collision == false);
         // There may be more values in our result object, but for non-colliding spheres,
         // we don't care about them
+    }
 
+    #[test]
+    fn test_sphere_sphere_intersection_single_axis() {
         // Assert that a collision in only one axis is still registered as a collision,
         // and the A and B values are as expected
         let sphere_5 = colliders::ColliderType::SPHERE {
@@ -114,7 +180,10 @@ mod tests {
         // Therefore, if A intersects past that point, we still expect the point furthest into B to be
         // B's center
         assert!(result.b.z == 20.0);
+    }
 
+    #[test]
+    fn test_sphere_sphere_intersection_mini_sphere_fully_contained() {
         // Assert that, when a sphere fully contains another sphere:
         // 1) it's registered as a collision
         // 2) the furthest point of the larger sphere into the smaller sphere is the smaller
@@ -146,38 +215,47 @@ mod tests {
     }
 
     #[test]
-    fn test_sphere_plane_intersection() {
-        // TODO
-        // Test basic case. A plane at the origin should intersect a sphere overlapping the origin
+    fn test_sphere_plane_intersection_example() {
+        // Roughly emulate the example in the screenshot in the "Collision detection"
+        // section of this article https://blog.winter.dev/articles/physics-engine
         let sphere_1 = colliders::ColliderType::SPHERE {
             center: XYZ {
                 x: 0.0,
-                y: 0.0,
+                y: 4.0,
                 z: 0.0,
             },
-            radius: 25.0,
+            radius: 10.0,
         };
         let plane_1 = colliders::ColliderType::PLANE {
             normal: XYZ {
                 x: 0.0,
-                y: 0.0,
+                y: 1.0, // lying flat on the x axis, extending also in z axis, normal pointing up
                 z: 0.0,
-            },
+            }
+            .normalize(),
             distance: 0.0,
         };
         let result = sphere_1.test_collision(&plane_1);
         assert!(result.has_collision == true);
         assert_eq!(result.a.x, 0.0);
-        assert_eq!(result.a.y, 0.0);
-        assert_eq!(result.a.z, 0.0);
         assert_eq!(result.b.x, 0.0);
-        assert_eq!(result.b.y, 0.0);
-        assert_eq!(result.b.z, 0.0);
-        assert_eq!(result.depth, 25.0);
-        assert_eq!(result.normal.x, 0.0);
-        assert_eq!(result.normal.y, 0.0);
-        assert_eq!(result.normal.z, 0.0);
 
+        // sphere's center minus its radius
+        assert_eq!(result.a.y, -6.0);
+        assert_eq!(result.b.y, 0.0);
+
+        assert_eq!(result.a.z, 0.0);
+        assert_eq!(result.b.z, 0.0);
+
+        assert_eq!(result.depth, 6.0);
+        assert_eq!(result.normal.x, 0.0);
+        // same as the plane's normal
+        assert_eq!(result.normal.y, 1.0);
+        assert_eq!(result.normal.z, 0.0);
+    }
+
+    #[test]
+    fn test_sphere_plane_intersection_sphere_not_at_origin() {
         // Test that it can handle a sphere which is not at the origin (0,0,0)
         let sphere_2 = colliders::ColliderType::SPHERE {
             center: XYZ {
@@ -189,25 +267,96 @@ mod tests {
         };
         let plane_2 = colliders::ColliderType::PLANE {
             normal: XYZ {
-                x: 0.0,
+                x: 1.0,
                 y: 0.0,
                 z: 0.0,
-            },
+            }
+            .normalize(),
             distance: 0.0,
         };
         let result = sphere_2.test_collision(&plane_2);
         assert!(result.has_collision == true);
-        // todo: determine what this is supposed to represent? Given that a sphere is infinite
-        assert_eq!(result.a.x, 0.0);
-        assert_eq!(result.a.y, 0.0);
-        assert_eq!(result.a.z, 0.0);
+        assert_eq!(result.a.x, -20.0);
+        assert_eq!(result.a.y, 5.0);
+        assert_eq!(result.a.z, 5.0);
+
+        // given that the sphere is not centered on the origin 0,0,0, the deepest intrusion of plane
+        // into the sphere should therefore not be at the sphere's center
         assert_eq!(result.b.x, 0.0);
-        assert_eq!(result.b.y, 0.0);
+        assert_eq!(result.b.y, 5.0);
+        assert_eq!(result.b.z, 5.0);
+        // this should not equal the sphere's radius, because the sphere isn't centered on 0,0,0
+        assert_eq!(result.depth, 20.0);
+        assert_eq!(result.normal.x, 1.0);
+        assert_eq!(result.normal.y, 0.0);
+        assert_eq!(result.normal.z, 0.0);
+    }
+
+    #[test]
+    fn test_sphere_plane_intersection_handles_plane_not_at_origin() {
+        // Test that we successfully handle a collision where the plane has a non-zero distance to origin
+        let sphere_3 = colliders::ColliderType::SPHERE {
+            center: XYZ {
+                x: 0.0,
+                y: 15.0,
+                z: 0.0,
+            },
+            radius: 14.00,
+        };
+        let plane_3 = colliders::ColliderType::PLANE {
+            normal: XYZ {
+                x: 0.0,
+                y: 1.0,
+                z: 0.0,
+            }
+            .normalize(),
+            // This should make the edge of the plane exactly touch the sphere
+            distance: 1.0,
+        };
+        let result = sphere_3.test_collision(&plane_3);
+        assert!(result.has_collision);
+        assert_eq!(result.a.x, 0.0);
+        assert_eq!(result.b.x, 0.0);
+
+        // this is the lowest point of the sphere
+        assert_eq!(result.a.y, 1.0);
+        assert_eq!(result.b.y, 1.0);
+
+        assert_eq!(result.a.z, 0.0);
         assert_eq!(result.b.z, 0.0);
-        assert_eq!(result.depth, 25.0);
+        // the two objects exactly touch, so we expect 0 depth
+        assert_eq!(result.depth, 0.0);
+
+        // TODO: determine why this is the BALANCED_NORMAL ?
+        // it's because we're normalizing (0,0,0)
+        // TODO: determine if / how we want to preserve a non-default normal?
         assert_eq!(result.normal.x, 0.0);
         assert_eq!(result.normal.y, 0.0);
         assert_eq!(result.normal.z, 0.0);
+    }
+
+    #[test]
+    fn test_sphere_plane_intersection_handles_no_collision_scenario() {
+        // Test that we gracefully handle a no-collision scenario
+        let sphere_3 = colliders::ColliderType::SPHERE {
+            center: XYZ {
+                x: 0.0,
+                y: 15.0,
+                z: 0.0,
+            },
+            radius: 14.99,
+        };
+        let plane_3 = colliders::ColliderType::PLANE {
+            normal: XYZ {
+                x: 0.0,
+                y: 1.0,
+                z: 0.0,
+            }
+            .normalize(),
+            distance: 0.0,
+        };
+        let result = sphere_3.test_collision(&plane_3);
+        assert!(!result.has_collision);
     }
 
     #[test]
