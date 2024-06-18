@@ -2,7 +2,6 @@
 
 pub mod colliders;
 pub mod objects;
-pub mod quaternion;
 pub mod transform;
 pub mod xyz;
 use crate::objects::Object;
