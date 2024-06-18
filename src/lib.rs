@@ -3,7 +3,11 @@
 pub mod colliders;
 pub mod objects;
 pub mod quaternion;
-use crate::objects::*;
+pub mod transform;
+pub mod xyz;
+use crate::objects::Object;
+use crate::transform::Transform;
+use crate::xyz::XYZ;
 use macroquad::prelude::*;
 use std::fmt;
 
@@ -82,11 +86,11 @@ struct CalculationDepthExceeded;
 //     return (circle_radius.powf(2.0) + tolerance) >= (a_2 + b_2);
 // }
 
-pub fn draw_particles(particles: &Vec<Particle>) {
+pub fn draw_particles(particles: &Vec<Object>) {
     for p in particles {
         draw_circle(
-            p.position.x.floor(),
-            p.position.y.floor(),
+            p.transform.position.x.floor(),
+            p.transform.position.y.floor(),
             PARTICLE_RADIUS_PX,
             PARTICLE_COLOR,
         );
@@ -112,16 +116,16 @@ pub fn calculate_particle_acceleration(
 }
 
 /// Returns a True if the input particle is touching the ground, else False. This function is not suitable for off-screen particles.
-pub fn particle_touching_ground(particle: &Particle) -> bool {
+pub fn particle_touching_ground(particle: &Object) -> bool {
     // Edge case: returns true if a particle has fallen off the bottom of the screen.
-    return (particle.position.y + PARTICLE_RADIUS_PX) >= SCREEN_HEIGHT;
+    return (particle.transform.position.y + PARTICLE_RADIUS_PX) >= SCREEN_HEIGHT;
 }
 
 /// Calculate the signed velocity change due to friction for a particle. Returns a value <= 0 if object is moving right, else >= 0.
 /// For realistic friction, the coefficients should be positive values.
 /// For now, we only apply friction in the horizontal dimension and for particles in contact with the ground.
 pub fn calculate_friction_deceleration(
-    particle: &Particle,
+    particle: &Object,
     friction_dynamic_coefficient: f32,
 ) -> f32 {
     // We use the following formula: F=ma
@@ -180,7 +184,7 @@ pub struct BounceResult {
 ///
 /// Output - an object representing the updated position and velocities of the input object.
 pub fn calculate_bounce(
-    particle: &Particle,
+    particle: &Object,
     bounce_coefficient: f32,
     time_elapsed_seconds: f64,
 ) -> Result<BounceResult, BounceError> {
@@ -189,9 +193,9 @@ pub fn calculate_bounce(
     let p = particle;
     let mut result = BounceResult {
         position: XYZ {
-            x: p.position.x,
-            y: p.position.y,
-            z: p.position.z,
+            x: p.transform.position.x,
+            y: p.transform.position.y,
+            z: p.transform.position.z,
         },
         velocity: XYZ {
             x: p.velocity.x,
@@ -204,28 +208,30 @@ pub fn calculate_bounce(
         // Return the input unmodified
         return Ok(result);
     }
-    if p.position.x - PARTICLE_RADIUS_PX < 0.0
-        || p.position.y - PARTICLE_RADIUS_PX < 0.0
-        || p.position.x + PARTICLE_RADIUS_PX > SCREEN_WIDTH
-        || p.position.y + PARTICLE_RADIUS_PX > SCREEN_HEIGHT
+
+    // TODO: update this to work with new collision detection logic
+    if p.transform.position.x - PARTICLE_RADIUS_PX < 0.0
+        || p.transform.position.y - PARTICLE_RADIUS_PX < 0.0
+        || p.transform.position.x + PARTICLE_RADIUS_PX > SCREEN_WIDTH
+        || p.transform.position.y + PARTICLE_RADIUS_PX > SCREEN_HEIGHT
     {
         return Err(BounceError::OutOfBoundsError(OutOfBoundsError {
-            object_location_x: p.position.x,
-            object_location_y: p.position.y,
+            object_location_x: p.transform.position.x,
+            object_location_y: p.transform.position.y,
         }));
     }
 
     assert!(bounce_coefficient < 1.0);
     let partial_res_x = bounce_helper(
         Axis::X,
-        p.position.x,
+        p.transform.position.x,
         p.velocity.x,
         time_elapsed_seconds,
         bounce_coefficient,
     );
     let partial_res_y = bounce_helper(
         Axis::Y,
-        p.position.y,
+        p.transform.position.y,
         p.velocity.y,
         time_elapsed_seconds,
         bounce_coefficient,
@@ -253,7 +259,7 @@ pub fn calculate_bounce(
 
     println!(
         "Bounce input Y: {}, output Y: {}, input X: {}, output X: {}",
-        p.position.y, result.position.y, p.position.x, result.position.x
+        p.transform.position.y, result.position.y, p.transform.position.x, result.position.x
     );
     return Ok(result);
 }
@@ -358,53 +364,53 @@ fn bounce_helper(
 
 /// Update a particle's properties, while remaining within a range of acceptable values. Also reset the velocity of off-screen particles, and clamp it to be within arena bounds
 pub fn set_particle_properties_within_bounds(
-    particle: &mut Particle,
+    particle: &mut Object,
     new_x_pos: f32,
     new_y_pos: f32,
     new_x_velocity: f32,
     new_y_velocity: f32,
 ) {
     let p = particle;
-    p.position.x = new_x_pos;
-    p.position.y = new_y_pos;
+    p.transform.position.x = new_x_pos;
+    p.transform.position.y = new_y_pos;
     p.velocity.x = new_x_velocity;
     p.velocity.y = new_y_velocity;
 
-    if SCREEN_HEIGHT < (p.position.y + PARTICLE_RADIUS_PX).floor() {
+    if SCREEN_HEIGHT < (p.transform.position.y + PARTICLE_RADIUS_PX).floor() {
         println!(
             "DEBUG: particle fully or partially off-screen at Y={}",
-            p.position.y
+            p.transform.position.y
         );
-        p.position.y = SCREEN_HEIGHT - PARTICLE_RADIUS_PX;
+        p.transform.position.y = SCREEN_HEIGHT - PARTICLE_RADIUS_PX;
         p.velocity.y = 0.0;
-    } else if 0.0 > (p.position.y - PARTICLE_RADIUS_PX).ceil() {
+    } else if 0.0 > (p.transform.position.y - PARTICLE_RADIUS_PX).ceil() {
         println!(
             "DEBUG: particle fully or partially off-screen at Y={}",
-            p.position.y
+            p.transform.position.y
         );
-        p.position.y = PARTICLE_RADIUS_PX;
+        p.transform.position.y = PARTICLE_RADIUS_PX;
         p.velocity.y = 0.0;
     }
 
-    if SCREEN_WIDTH < (p.position.x + PARTICLE_RADIUS_PX).floor() {
+    if SCREEN_WIDTH < (p.transform.position.x + PARTICLE_RADIUS_PX).floor() {
         println!(
             "DEBUG: particle fully or partially off-screen at X={}",
-            p.position.x
+            p.transform.position.x
         );
-        p.position.x = SCREEN_WIDTH - PARTICLE_RADIUS_PX;
+        p.transform.position.x = SCREEN_WIDTH - PARTICLE_RADIUS_PX;
         p.velocity.x = 0.0;
-    } else if 0.0 > (p.position.x - PARTICLE_RADIUS_PX).ceil() {
+    } else if 0.0 > (p.transform.position.x - PARTICLE_RADIUS_PX).ceil() {
         println!(
             "DEBUG: particle fully or partially off-screen at X={}",
-            p.position.x
+            p.transform.position.x
         );
-        p.position.x = PARTICLE_RADIUS_PX;
+        p.transform.position.x = PARTICLE_RADIUS_PX;
         p.velocity.x = 0.0;
     }
 }
 
 /// Draw simulation stats to screen
-pub fn draw_stats(particles: &Vec<Particle>) {
+pub fn draw_stats(particles: &Vec<Object>) {
     // TODO: fix sum_y_positions so that it doesn't overflow or nan or whatever with 1000 particles
     let mut sum_y_velocity = 0.0;
     let mut sum_x_velocity = 0.0;
@@ -412,7 +418,7 @@ pub fn draw_stats(particles: &Vec<Particle>) {
     for p in particles {
         sum_y_velocity += p.velocity.y;
         sum_x_velocity += p.velocity.x;
-        sum_y_positions += p.position.y;
+        sum_y_positions += p.transform.position.y;
     }
     let avg_y_velocity = sum_y_velocity / particles.len() as f32;
     let avg_x_velocity = sum_x_velocity / particles.len() as f32;
@@ -451,18 +457,18 @@ pub fn draw_stats(particles: &Vec<Particle>) {
     }
 }
 
-pub fn simulation_tick(particles: &mut Vec<Particle>, time_elapsed_seconds: f64) {
+pub fn simulation_tick(particles: &mut Vec<Object>, time_elapsed_seconds: f64) {
     for p in particles.iter_mut() {
         println!(
             "Before calculations: X={}, X_vel={}, Y={}, Y_vel={}",
-            p.position.x, p.velocity.x, p.position.y, p.velocity.y
+            p.transform.position.x, p.velocity.x, p.transform.position.y, p.velocity.y
         );
 
         // TODO: resume. Implement friction such that I can make gravity not be a global constant
         p.force.y += p.mass * GRAVITY_MS;
         p.velocity += &p.force / p.mass * time_elapsed_seconds as f32;
-        p.position += &p.velocity * time_elapsed_seconds as f32;
-        println!("{}; {}; {}; {}", p.force, p.velocity, p.position, p.force);
+        p.transform.position += &p.velocity * time_elapsed_seconds as f32;
+        println!( "{}; {}; {}; {}", p.force, p.velocity, p.transform.position, p.force);
         p.force = XYZ {
             x: 0.0,
             y: 0.0,
@@ -507,7 +513,7 @@ pub fn simulation_tick(particles: &mut Vec<Particle>, time_elapsed_seconds: f64)
 
         println!(
             "After calculations: Y={}, Y_vel={}, X={}, X_vel={}",
-            p.position.y, p.velocity.y, p.position.x, p.velocity.x
+            p.transform.position.y, p.velocity.y, p.transform.position.x, p.velocity.x
         );
     }
 }
@@ -527,12 +533,25 @@ pub fn simulation_tick(particles: &mut Vec<Particle>, time_elapsed_seconds: f64)
 pub async fn p_main() {
     // Setup
     request_new_screen_size(SCREEN_WIDTH, SCREEN_HEIGHT);
-    let mut particles: Vec<Particle> = Vec::new();
-    particles.push(Particle {
-        position: XYZ {
-            x: 0.5 * SCREEN_WIDTH,
-            y: convert_meters_to_pixels(72.0 - 50.0, PIXELS_PER_METER),
-            z: 0.0,
+    let mut particles: Vec<Object> = Vec::new();
+    particles.push(Object {
+        transform: Transform {
+            position: XYZ {
+                x: 0.5 * SCREEN_WIDTH,
+                y: convert_meters_to_pixels(72.0 - 50.0, PIXELS_PER_METER),
+                z: 0.0,
+            },
+            rotation: Quat {
+                w: 0.0,
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            scale: XYZ {
+                x: 1.0,
+                y: 1.0,
+                z: 1.0,
+            },
         },
         velocity: XYZ {
             x: 55.0,
@@ -543,6 +562,15 @@ pub async fn p_main() {
             x: 0.0,
             y: 0.0,
             z: 0.0,
+        },
+        // TODO: unify this with the position stuff above
+        collider: colliders::ColliderType::SPHERE {
+            center: XYZ {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            radius: 10.0,
         },
         mass: 1.0,
     });
@@ -561,10 +589,10 @@ pub async fn p_main() {
     // A negative bounce coefficient makes no sense. Either an object bounces (val >=0) or doesn't (val == 0)
     assert!(BOUNCE_COEFFICIENT >= 0.0);
     // For accurate results, the particle should spawn fully within simulation bounds
-    assert!(particles[0].position.x >= PARTICLE_RADIUS_PX);
-    assert!(particles[0].position.y >= PARTICLE_RADIUS_PX);
-    assert!(particles[0].position.x <= SCREEN_WIDTH - PARTICLE_RADIUS_PX);
-    assert!(particles[0].position.y <= SCREEN_HEIGHT - PARTICLE_RADIUS_PX);
+    assert!(particles[0].transform.position.x >= PARTICLE_RADIUS_PX);
+    assert!(particles[0].transform.position.y >= PARTICLE_RADIUS_PX);
+    assert!(particles[0].transform.position.x <= SCREEN_WIDTH - PARTICLE_RADIUS_PX);
+    assert!(particles[0].transform.position.y <= SCREEN_HEIGHT - PARTICLE_RADIUS_PX);
 
     let mut last_tick_time = get_time();
 

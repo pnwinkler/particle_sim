@@ -1,9 +1,7 @@
-use crate::objects::NormalizeXyz;
+use crate::xyz::MagnitudeXyz;
+use crate::xyz::NormalizeXyz;
+use crate::xyz::XYZ;
 use core::fmt;
-
-// TODO: put the 2 structs below into transform.rs
-use crate::objects::*;
-use crate::quaternion::*;
 
 pub struct CollisionPoints {
     pub a: XYZ,      // Furthest point of A into B
@@ -23,18 +21,39 @@ impl fmt::Display for CollisionPoints {
     }
 }
 
-struct Transform {
-    // Describes an object's location
-    position: XYZ,
-    scale: XYZ,
-    rotation: Quaternion,
-}
-
 pub enum ColliderType {
-    SPHERE { center: XYZ, radius: f32 },
+    SPHERE {
+        center: XYZ,
+        radius: f32,
+    },
     /// Remember to normalize this. We don't do it automatically, in order to avoid accidentally normalizing twice
     /// which could magnify potential floating point imprecision.
-    PLANE { normal: XYZ, distance: f32 },
+    PLANE {
+        normal: XYZ,
+        distance: f32,
+    },
+    // todo? Add a none type, so we can have objects which don't collide
+}
+
+impl fmt::Display for ColliderType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ColliderType::SPHERE { center, radius } => {
+                write!(
+                    f,
+                    "ColliderType::SPHERE(center={},radius={}",
+                    center, radius
+                )
+            }
+            ColliderType::PLANE { normal, distance } => {
+                write!(
+                    f,
+                    "ColliderType::SPHERE(center={},radius={}",
+                    normal, distance
+                )
+            }
+        }
+    }
 }
 
 pub trait TestCollision {

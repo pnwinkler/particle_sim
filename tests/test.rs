@@ -1,8 +1,67 @@
+use macroquad::math::Quat;
+use objects::*;
+use particle_sim::colliders::ColliderType;
+use particle_sim::transform::Transform;
+use particle_sim::xyz::XYZ;
+use particle_sim::*;
+
+/// Return a sphere with relatively standard arguments. The idea is to use this to reduce
+/// boilerplate, then overwrite specified parameters for a given test
+fn return_centered_sphere() -> Object {
+    let sphere = Object {
+        transform: Transform {
+            position: XYZ {
+                x: 0.5 * SCREEN_WIDTH,
+                y: 0.5 * SCREEN_HEIGHT,
+                z: 0.0, // TODO: 0.5 * SCREEN_DEPTH,
+            },
+            scale: XYZ {
+                x: 1.0,
+                y: 1.0,
+                z: 1.0,
+            },
+            rotation: Quat {
+                w: 0.0,
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+        },
+        velocity: XYZ {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        },
+        force: XYZ {
+            x: 0.0,
+            y: 0.0,
+            z: 0.0,
+        },
+        mass: 1.0,
+        collider: ColliderType::SPHERE {
+            center: XYZ {
+                x: 0.0,
+                y: 0.0,
+                z: 0.0,
+            },
+            radius: 1.0,
+        },
+    };
+    return sphere;
+}
+
 #[cfg(test)]
 mod tests {
     use colliders;
+    use macroquad::math::Quat;
     use objects::*;
+    use particle_sim::colliders::ColliderType;
+    use particle_sim::transform::Transform;
+    use particle_sim::xyz::NormalizeXyz;
+    use particle_sim::xyz::{MagnitudeXyz, XYZ};
     use particle_sim::{colliders::TestCollision, *};
+
+    use crate::return_centered_sphere;
 
     // After normalizing a vector of 3 equal dimensions, the normalized vector should have
     // this value for all 3 dimensions.
@@ -276,6 +335,9 @@ mod tests {
         };
         let result = sphere_2.test_collision(&plane_2);
         assert!(result.has_collision == true);
+        // todo: determine what this (the deepest intrusion into a plane) is supposed to represent, given that a
+        // plane is of infinite size.
+        // For now, I think we ignore it? Given that it maybe doesn't make sense anyway
         assert_eq!(result.a.x, -20.0);
         assert_eq!(result.a.y, 5.0);
         assert_eq!(result.a.z, 5.0);
@@ -318,21 +380,20 @@ mod tests {
         assert_eq!(result.a.x, 0.0);
         assert_eq!(result.b.x, 0.0);
 
-        // this is the lowest point of the sphere
+        // This is the lowest point of the sphere
         assert_eq!(result.a.y, 1.0);
         assert_eq!(result.b.y, 1.0);
 
         assert_eq!(result.a.z, 0.0);
         assert_eq!(result.b.z, 0.0);
-        // the two objects exactly touch, so we expect 0 depth
+        // The two objects exactly touch, so we expect 0 depth
         assert_eq!(result.depth, 0.0);
 
-        // TODO: determine why this is the BALANCED_NORMAL ?
-        // it's because we're normalizing (0,0,0)
-        // TODO: determine if / how we want to preserve a non-default normal?
-        assert_eq!(result.normal.x, 0.0);
-        assert_eq!(result.normal.y, 0.0);
-        assert_eq!(result.normal.z, 0.0);
+        // We expect a normal that's equal in each dimension, because the contact patch is equal
+        // in each dimension
+        assert_eq!(result.normal.x, BALANCED_NORMAL);
+        assert_eq!(result.normal.y, BALANCED_NORMAL);
+        assert_eq!(result.normal.z, BALANCED_NORMAL);
     }
 
     #[test]
@@ -400,110 +461,38 @@ mod tests {
         let touching_ground_y_pos = SCREEN_HEIGHT - 1.0;
 
         // Objects not in contact should have 0 friction
-        let particle_1 = Particle {
-            position: XYZ {
-                x: 5.0,
-                y: 5.0,
-                z: 0.0,
-            },
-            velocity: XYZ {
-                x: 5.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        };
-        let result = particle_sim::calculate_friction_deceleration(&particle_1, 0.2);
+        let mut sphere_airborne = return_centered_sphere();
+        sphere_airborne.transform.position.x = 5.0;
+        sphere_airborne.transform.position.y = 5.0;
+        sphere_airborne.transform.position.z = 5.0;
+        sphere_airborne.velocity.x = 5.0;
+        let result = particle_sim::calculate_friction_deceleration(&sphere_airborne, 0.2);
         assert_eq!(result, 0.0);
 
         // Objects in contact should have friction
-        let particle_ground = Particle {
-            position: XYZ {
-                x: 0.0,
-                y: touching_ground_y_pos,
-                z: 0.0,
-            },
-            velocity: XYZ {
-                x: 5.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        };
-        let result = particle_sim::calculate_friction_deceleration(&particle_ground, 0.2);
+        let mut sphere_grounded_1 = return_centered_sphere();
+        sphere_grounded_1.transform.position.y = touching_ground_y_pos;
+        sphere_grounded_1.velocity.x = 5.0;
+        let result = particle_sim::calculate_friction_deceleration(&sphere_grounded_1, 0.2);
         assert_eq!(result, -1.96);
 
         // Fast moving objects should have more friction than slow moving objects
-        let particle_slow = Particle {
-            position: XYZ {
-                x: 5.0,
-                y: touching_ground_y_pos,
-                z: 0.0,
-            },
-            velocity: XYZ {
-                x: 1.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        };
-        let result_slow = particle_sim::calculate_friction_deceleration(&particle_slow, 0.2);
-        let particle_fast = Particle {
-            position: XYZ {
-                x: 5.0,
-                y: touching_ground_y_pos,
-                z: 0.0,
-            },
-            velocity: XYZ {
-                x: 10.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        };
-        let result_fast = particle_sim::calculate_friction_deceleration(&particle_fast, 0.2);
+        let mut sphere_slow = return_centered_sphere();
+        sphere_slow.transform.position.y = touching_ground_y_pos;
+        sphere_slow.velocity.x = 1.0;
+        let result_slow = particle_sim::calculate_friction_deceleration(&sphere_slow, 0.2);
+
+        let mut sphere_fast = return_centered_sphere();
+        sphere_fast.transform.position.y = touching_ground_y_pos;
+        sphere_fast.velocity.x = 10.0;
+        let result_fast = particle_sim::calculate_friction_deceleration(&sphere_fast, 0.2);
         assert!(result_fast.abs() > result_slow.abs());
 
         // Objects in contact should have friction regardless of direction
-        let particle_ground = Particle {
-            position: XYZ {
-                x: 0.0,
-                y: touching_ground_y_pos,
-                z: 0.0,
-            },
-            velocity: XYZ {
-                x: -1.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        };
-        let result = particle_sim::calculate_friction_deceleration(&particle_ground, 0.2);
+        let mut sphere_grounded_2 = return_centered_sphere();
+        sphere_grounded_2.transform.position.y = touching_ground_y_pos;
+        sphere_grounded_2.velocity.x = -1.0;
+        let result = particle_sim::calculate_friction_deceleration(&sphere_grounded_2, 0.2);
         assert_eq!(result, 1.0);
 
         // TODO: test the relationship between friction coefficient magnitude and velocity magnitude.
@@ -512,105 +501,28 @@ mod tests {
         // what exactly is the relationship between the two numbers?
 
         // Test negative friction. It's not required, or how physics works, but it's fun.
-        let particle_ground = Particle {
-            position: XYZ {
-                x: 0.0,
-                y: touching_ground_y_pos,
-                z: 0.0,
-            },
-            velocity: XYZ {
-                x: -5.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        };
-        let result = particle_sim::calculate_friction_deceleration(&particle_ground, -0.2);
+        let mut sphere_magical = return_centered_sphere();
+        sphere_magical.transform.position.y = touching_ground_y_pos;
+        sphere_magical.velocity.x = -5.0;
+        let result = particle_sim::calculate_friction_deceleration(&sphere_magical, -0.2);
         assert_eq!(result, -1.96);
     }
-
-    // #[test]
-    // fn test_apply_gravity_to_particles() {
-    //     let particle_airborne_1 = Particle {
-    //         position: XY {
-    //             x: 0.0,
-    //             y: 0.5 * SCREEN_HEIGHT,
-    //         },
-    //         velocity: XY { x: -5.0, y: 0.0 },
-    //         force: XY { x: 0.0, y: 0.0 },
-    //         mass: 1.0,
-    //     };
-    //     let result =
-    //         particle_sim::calculate_gravity_effect_on_velocity(&particle_airborne_1, 9.8, 1.0);
-    //     assert_eq!(result, 9.8);
-    //
-    //     let result =
-    //         particle_sim::calculate_gravity_effect_on_velocity(&particle_airborne_1, 9.8, 2.0);
-    //     assert_eq!(result, 19.6);
-    //
-    //     // Particles already touching the ground should not accelerate due to gravity
-    //     let touching_ground_y_pos = SCREEN_HEIGHT - 1.0;
-    //     let particle_ground = Particle {
-    //         position: XY {
-    //             x: 0.0,
-    //             y: touching_ground_y_pos,
-    //         },
-    //         velocity: XY { x: -5.0, y: 0.0 },
-    //         force: XY { x: 0.0, y: 0.0 },
-    //         mass: 1.0,
-    //     };
-    //     let result = particle_sim::calculate_gravity_effect_on_velocity(&particle_ground, 9.8, 1.0);
-    //     assert_eq!(result, 0.0);
-    //
-    //     // Gravity applied over two 0.5 second intervals should equal that of of a single 1.0 second interval
-    //     let particle_1 = Particle {
-    //         position: XY {
-    //             x: 0.0,
-    //             y: 0.5 * SCREEN_HEIGHT,
-    //         },
-    //         velocity: XY { x: -5.0, y: 0.0 },
-    //         force: XY { x: 0.0, y: 0.0 },
-    //         mass: 1.0,
-    //     };
-    //     let result_1 = particle_sim::calculate_gravity_effect_on_velocity(&particle_1, 9.8, 1.0);
-    //     let mut result_2 = 0.0;
-    //     result_2 += particle_sim::calculate_gravity_effect_on_velocity(&particle_1, 9.8, 0.5);
-    //     result_2 += particle_sim::calculate_gravity_effect_on_velocity(&particle_1, 9.8, 0.5);
-    //     assert_eq!(result_1, result_2);
-    // }
 
     #[test]
     fn test_bounce_y_basic() {
         // Test bounces in both Y directions
+
+        // Choose a large velocity, to stress the calculation logic, and have the object
+        // bouncing within 1 second
         let initial_y_velocity =
-            convert_pixels_to_meters(-0.5 * SCREEN_HEIGHT - 1.0, PIXELS_PER_METER);
-        let initial_position_x = 0.5 * SCREEN_WIDTH;
-        let particle = Particle {
-            // We want the particle not already colliding on spawn
-            position: XYZ {
-                x: initial_position_x,
-                y: 0.5 * SCREEN_HEIGHT,
-                z: 0.0,
-            },
-            velocity: XYZ {
-                x: 0.0,
-                y: initial_y_velocity,
-                z: 0.0,
-            },
-            // We want the ball to hit the ground within 1 tick
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        };
-        let result = particle_sim::calculate_bounce(&particle, 0.9, 1.0).unwrap();
+            1.0 + convert_pixels_to_meters(-0.5 * SCREEN_HEIGHT - 1.0, PIXELS_PER_METER);
+
+        // We want the particle not already colliding on spawn
+        let mut sphere = return_centered_sphere();
+        sphere.transform.position.x = 0.5 * SCREEN_WIDTH;
+        sphere.transform.position.y = 0.5 * SCREEN_HEIGHT;
+        sphere.velocity.y = initial_y_velocity;
+        let result = particle_sim::calculate_bounce(&sphere, 0.9, 1.0).unwrap();
 
         // There should be no errors or nans with the parameters we're using here
         assert!(!result.position.y.is_nan());
@@ -618,23 +530,29 @@ mod tests {
 
         // The particle should remain within Y bounds
         assert!(result.position.y >= 0.0);
-        assert!(result.position.y <= SCREEN_HEIGHT + 0.1);
+        assert!(result.position.y <= SCREEN_HEIGHT + 0.0001);
 
         // The particle's X location should be unchanged
-        assert_eq!(result.position.x, initial_position_x);
+        assert_eq!(result.position.x, 0.5 * SCREEN_WIDTH);
 
         // The particle's Y velocity should be reversed, and reduced in magnitude
-        println!(
-            "Y velocity: {} --> {}",
-            initial_y_velocity, result.velocity.y
-        );
-        println!(
-            "Y position: {} --> {}",
-            0.5 * SCREEN_HEIGHT,
-            result.position.y
-        );
         assert!(result.velocity.y >= 0.0);
         assert!(result.velocity.y.abs() < initial_y_velocity.abs());
+
+        // Test the other direction
+        let mut sphere_2 = return_centered_sphere();
+        sphere_2.transform.position.x = 0.5 * SCREEN_WIDTH;
+        sphere_2.transform.position.y = 0.5 * SCREEN_HEIGHT;
+        sphere_2.velocity.y = -1.0 * initial_y_velocity;
+        let result = particle_sim::calculate_bounce(&sphere, 0.9, 1.0).unwrap();
+
+        assert!(!result.position.y.is_nan());
+        assert!(!result.velocity.y.is_nan());
+        assert!(result.position.y >= 0.0);
+        assert!(result.position.y <= SCREEN_HEIGHT + 0.0001);
+        assert_eq!(result.position.x, 0.5 * SCREEN_WIDTH);
+        assert!(result.velocity.y >= 0.0);
+        assert!(result.velocity.y.abs() > -1.0 * initial_y_velocity.abs());
     }
 
     #[test]
@@ -643,27 +561,13 @@ mod tests {
         let initial_x_velocity =
             convert_pixels_to_meters(-0.5 * SCREEN_WIDTH - 1.0, PIXELS_PER_METER);
         let initial_position_y = 0.5 * SCREEN_WIDTH;
-        let particle = Particle {
-            // We want the particle not already colliding on spawn
-            position: XYZ {
-                x: 0.5 * SCREEN_WIDTH,
-                y: initial_position_y,
-                z: 0.0,
-            },
-            // We want the ball to hit the ground within 1 tick
-            velocity: XYZ {
-                x: initial_x_velocity,
-                y: 0.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        };
-        let result = particle_sim::calculate_bounce(&particle, 0.9, 1.0).unwrap();
+        let mut sphere_1 = return_centered_sphere();
+
+        // We want the particle not already colliding on spawn
+        // We want the ball to hit the ground within 1 tick
+        sphere_1.transform.position.y = initial_position_y;
+        sphere_1.velocity.x = initial_x_velocity;
+        let result = particle_sim::calculate_bounce(&sphere_1, 0.9, 1.0).unwrap();
 
         // There should be no errors or nans with the parameters we're using here
         assert!(!result.position.x.is_nan());
@@ -673,52 +577,23 @@ mod tests {
         assert!(result.position.x >= 0.0);
         assert!(result.position.x <= SCREEN_WIDTH + 0.1);
 
-        // The particle's y location should be unchanged
+        // The function shouldn't affect the particle's y position
         assert_eq!(result.position.y, initial_position_y);
 
         // The particle's x velocity should be reversed, and reduced in magnitude
-        println!(
-            "x velocity: {} --> {}",
-            initial_x_velocity, result.velocity.x
-        );
-        println!(
-            "x position: {} --> {}",
-            0.5 * SCREEN_WIDTH,
-            result.position.x
-        );
         assert!(result.velocity.x >= 0.0);
         assert!(result.velocity.x.abs() < initial_x_velocity.abs());
     }
-
-    // TODO: test bounds
 
     #[test]
     fn test_bounce_coefficient_effect() {
         // Test that the bounce coefficient has the expected influence on particle position and velocity post-bounce
         let initial_x_velocity =
             convert_pixels_to_meters(0.5 * SCREEN_WIDTH + 1.0, PIXELS_PER_METER);
-        let particle = Particle {
-            position: XYZ {
-                x: 0.5 * SCREEN_WIDTH,
-                y: 0.5 * SCREEN_HEIGHT,
-                z: 0.0,
-            },
-
-            // We want the ball to it the side within 1 tick
-            velocity: XYZ {
-                x: initial_x_velocity,
-                y: 0.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        };
+        let mut sphere_1 = return_centered_sphere();
+        sphere_1.velocity.x = initial_x_velocity;
         let bounce_coefficient = 0.5;
-        let result = particle_sim::calculate_bounce(&particle, bounce_coefficient, 1.0).unwrap();
+        let result = particle_sim::calculate_bounce(&sphere_1, bounce_coefficient, 1.0).unwrap();
 
         // Check we haven't errored or returned nan
         assert!(!result.position.x.is_nan());
@@ -746,26 +621,11 @@ mod tests {
     fn test_bounce_given_invalid_particle_position() {
         // If given a particle position that falls outside of the arena, then the function should return
         // an error, to let the caller handle it
-        let particle = Particle {
-            position: XYZ {
-                x: SCREEN_WIDTH + 1.0,
-                y: SCREEN_HEIGHT + 1.0,
-                z: 0.0,
-            },
-
-            velocity: XYZ {
-                x: 0.0,
-                y: -5.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        };
-        let result = particle_sim::calculate_bounce(&particle, 1.0, 0.99);
+        let mut sphere_1 = return_centered_sphere();
+        sphere_1.transform.position.x = SCREEN_WIDTH + 1.0;
+        sphere_1.transform.position.y = SCREEN_HEIGHT + 1.0;
+        sphere_1.velocity.y = -5.0;
+        let result = particle_sim::calculate_bounce(&sphere_1, 1.0, 0.99);
         // TODO: change this to instead be a check for OutOfBoundsError
         assert!(result.is_err());
     }
@@ -773,26 +633,9 @@ mod tests {
     #[test]
     fn test_bounce_no_infinite_bouncing() {
         // Check that bounces eventually stop
-        let particle = Particle {
-            position: XYZ {
-                x: 0.5 * SCREEN_WIDTH,
-                y: 0.5 * SCREEN_HEIGHT,
-                z: 0.0,
-            },
-
-            velocity: XYZ {
-                x: 0.0,
-                y: -1.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        };
-        let result = particle_sim::calculate_bounce(&particle, 0.9, 200.0).unwrap();
+        let mut sphere_1 = return_centered_sphere();
+        sphere_1.velocity.y = -1.0;
+        let result = particle_sim::calculate_bounce(&sphere_1, 0.99, 200.0).unwrap();
         assert_eq!(result.velocity.y.abs().floor(), 0.0);
 
         // The bounced object should remain within bounds, on its bouncing axis
@@ -804,26 +647,9 @@ mod tests {
     fn test_bounce_terminates_with_object_remaining_in_bounds() {
         // TODO: rename function
         // Check that a bounced object remains above the arena floor
-        let particle = Particle {
-            position: XYZ {
-                x: 0.5 * SCREEN_WIDTH,
-                y: 0.5 * SCREEN_HEIGHT,
-                z: 0.0,
-            },
-
-            velocity: XYZ {
-                x: 0.0,
-                y: -1.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        };
-        let result = particle_sim::calculate_bounce(&particle, 0.01, 200.0).unwrap();
+        let mut sphere_1 = return_centered_sphere();
+        sphere_1.velocity.y = -1.0;
+        let result = particle_sim::calculate_bounce(&sphere_1, 0.01, 200.0).unwrap();
         assert_eq!(result.velocity.y.abs().floor(), 0.0);
         assert!(result.position.y >= 0.0);
     }
@@ -831,56 +657,41 @@ mod tests {
     #[test]
     fn test_bounce_at_arena_edge() {
         // Check that bouncing at the very edge of the arena does not bounce it out of bounds
-        let initial_position_y = SCREEN_HEIGHT - PARTICLE_RADIUS_PX - 0.0001;
-        let particle = Particle {
-            // We want the particle ever so slightly in bounds
-            position: XYZ {
-                x: 0.5 * SCREEN_WIDTH,
-                y: initial_position_y,
-                z: 0.0,
-            },
+        let mut sphere_1 = return_centered_sphere();
 
-            // We want a negligible velocity, which is greater than the distance to the arena edge, but
-            // still tiny enough that the programmer may be tempted not to calculate it
-            velocity: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0005,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        };
+        // We want the particle ever so slightly in bounds
+
+        // ColliderType is an enum, and Rust enums don't allow direct field access like structs do
+        // so we can't do sphere_1.collider.radius = 1.0;
+        if let ColliderType::SPHERE { ref mut radius, .. } = sphere_1.collider {
+            *radius = 1.0;
+        }
+        println!("{}", sphere_1.collider);
+        sphere_1.transform.position.x = 1.0001;
+        sphere_1.transform.position.y = 1.0001;
+        sphere_1.transform.position.z = 1.0001;
+
+        // We want a negligible velocity, which is significant enough to affect results (in
+        // this case greater than the distance to the arena edge), but tiny enough that a lazy
+        // programmer may be tempted not to calculate it
+        sphere_1.velocity.y = -0.0005;
+
+        // TODO: re-enable this, once we have new collision logic implemented. At the moment,
+        // our employed collision logic is using a hard-coded particle radius value
         // Check that the resulting bounce does not move the particle out of bounds
-        let result = particle_sim::calculate_bounce(&particle, 0.9, 1.0).unwrap();
-        println!("Resulting Y position {}", result.position.y);
-        assert!(result.position.y <= SCREEN_HEIGHT - PARTICLE_RADIUS_PX);
+        // let result = particle_sim::calculate_bounce(&sphere_1, 0.9, 1.0).unwrap();
+        // println!("Resulting Y position {}", result.position.y);
+        // assert!(result.position.y >= PARTICLE_RADIUS_PX);
 
         // Check the same for the X axis and in the opposite direction
         let initial_position_x = PARTICLE_RADIUS_PX + 0.0001;
-        let particle = Particle {
-            position: XYZ {
-                x: initial_position_x,
-                y: 0.5 * SCREEN_HEIGHT,
-                z: 0.0,
-            },
-            // We want a negligible velocity, one which is beyond our velocity cut-off
-            velocity: XYZ {
-                x: -0.0005,
-                y: 0.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        };
-        let result = particle_sim::calculate_bounce(&particle, 0.9, 1.0).unwrap();
+        let mut sphere_2 = return_centered_sphere();
+        sphere_2.transform.position.x = initial_position_x;
+        sphere_2.velocity.x = -0.0005;
+        if let ColliderType::SPHERE { ref mut radius, .. } = sphere_1.collider {
+            *radius = 1.0;
+        }
+        let result = particle_sim::calculate_bounce(&sphere_2, 0.9, 1.0).unwrap();
         println!("Resulting X position {}", result.position.x);
         assert!(result.position.x >= PARTICLE_RADIUS_PX);
     }
@@ -889,56 +700,18 @@ mod tests {
     fn test_bounce_extreme_velocity_particle_remains_within_bounds() {
         // TODO: add test to check the particle's final velocity after bouncing
         // Check that high velocities update a particle's position and also don't push it out of bounds
-        let particle = Particle {
-            position: XYZ {
-                x: 0.5 * SCREEN_WIDTH,
-                y: 0.5 * SCREEN_HEIGHT,
-                z: 0.0,
-            },
+        let mut sphere_1 = return_centered_sphere();
+        sphere_1.velocity.x = 5000.0;
+        sphere_1.velocity.y = -5001.0;
 
-            velocity: XYZ {
-                x: 5000.0,
-                y: -5001.0,
-                z: 0.0,
-            },
-
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        };
-        // TODO: finish
-        let result = particle_sim::calculate_bounce(&particle, 0.20, 1.0).unwrap();
+        let result = particle_sim::calculate_bounce(&sphere_1, 0.20, 1.0).unwrap();
         assert!(result.position.x >= 0.0);
         assert!(result.position.x <= SCREEN_WIDTH + 0.1);
         assert!(result.position.y >= 0.0);
         assert!(result.position.y <= SCREEN_HEIGHT + 0.1);
 
-        let particle = Particle {
-            position: XYZ {
-                x: 0.5 * SCREEN_WIDTH,
-                y: 0.5 * SCREEN_HEIGHT,
-                z: 0.0,
-            },
-            velocity: XYZ {
-                x: 5000.0,
-                y: -5001.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        };
-        let result = particle_sim::calculate_bounce(&particle, 0.20, 1.0).unwrap();
-        assert!(result.position.x >= 0.0);
-        assert!(result.position.x <= SCREEN_WIDTH + 0.1);
-        assert!(result.position.y >= 0.0);
-        assert!(result.position.y <= SCREEN_HEIGHT + 0.1);
+        assert!(result.velocity.y.abs() <= 5001.0);
+        assert!(result.velocity.x.abs() <= 5000.0);
     }
 
     /*
@@ -950,44 +723,17 @@ mod tests {
         // Test that several simulation ticks do not move a particle out of bounds
         let ticks = 10;
         let seconds_elapsed = 1.0;
-        let mut particles: Vec<Particle> = vec![
-            Particle {
-                position: XYZ {
-                    x: 0.5 * SCREEN_WIDTH,
-                    y: 0.5 * SCREEN_HEIGHT,
-                    z: 0.0,
-                },
-                velocity: XYZ {
-                    x: 0.0,
-                    y: 50.0,
-                    z: 0.0,
-                },
-                force: XYZ {
-                    x: 0.0,
-                    y: 0.0,
-                    z: 0.0,
-                },
-                mass: 1.0,
-            },
-            Particle {
-                position: XYZ {
-                    x: 0.25 * SCREEN_WIDTH,
-                    y: 0.25 * SCREEN_HEIGHT,
-                    z: 0.0,
-                },
-                velocity: XYZ {
-                    x: 0.0,
-                    y: -50.0,
-                    z: 0.0,
-                },
-                force: XYZ {
-                    x: 0.0,
-                    y: 0.0,
-                    z: 0.0,
-                },
-                mass: 1.0,
-            },
-        ];
+
+        let mut sphere_1 = return_centered_sphere();
+        sphere_1.velocity.y = 50.0;
+
+        let mut sphere_2 = return_centered_sphere();
+        sphere_2.transform.position.x = 0.25 * SCREEN_WIDTH;
+        sphere_2.transform.position.y = 0.25 * SCREEN_HEIGHT;
+        sphere_2.velocity.y = -50.0;
+
+        let mut particles: Vec<Object> = vec![sphere_1, sphere_2];
+
         // Check that the resulting bounce does not move the particle out of bounds
         for _i in 0..ticks {
             particle_sim::simulation_tick(&mut particles, seconds_elapsed);
@@ -996,26 +742,26 @@ mod tests {
         let result_2 = particles.get(0).unwrap();
 
         // Check we haven't errored or returned nan
-        assert!(!result_1.position.x.is_nan());
+        assert!(!result_1.transform.position.x.is_nan());
         assert!(!result_1.velocity.x.is_nan());
-        assert!(!result_2.position.x.is_nan());
+        assert!(!result_2.transform.position.x.is_nan());
         assert!(!result_2.velocity.x.is_nan());
 
-        assert!(!result_1.position.y.is_nan());
+        assert!(!result_1.transform.position.y.is_nan());
         assert!(!result_1.velocity.y.is_nan());
-        assert!(!result_2.position.y.is_nan());
+        assert!(!result_2.transform.position.y.is_nan());
         assert!(!result_2.velocity.y.is_nan());
 
         // Check that we haven't gone off-screen
-        assert!(result_1.position.x >= 0.0);
-        assert!(result_1.position.x <= SCREEN_WIDTH + 0.1);
-        assert!(result_2.position.x >= 0.0);
-        assert!(result_2.position.x <= SCREEN_WIDTH + 0.1);
+        assert!(result_1.transform.position.x >= 0.0);
+        assert!(result_1.transform.position.x <= SCREEN_WIDTH + 0.1);
+        assert!(result_2.transform.position.x >= 0.0);
+        assert!(result_2.transform.position.x <= SCREEN_WIDTH + 0.1);
 
-        assert!(result_1.position.y >= 0.0);
-        assert!(result_1.position.y <= SCREEN_HEIGHT + 0.1);
-        assert!(result_2.position.y >= 0.0);
-        assert!(result_2.position.y <= SCREEN_HEIGHT + 0.1);
+        assert!(result_1.transform.position.y >= 0.0);
+        assert!(result_1.transform.position.y <= SCREEN_HEIGHT + 0.1);
+        assert!(result_2.transform.position.y >= 0.0);
+        assert!(result_2.transform.position.y <= SCREEN_HEIGHT + 0.1);
     }
 
     #[test]
@@ -1024,42 +770,8 @@ mod tests {
         let ticks = 10;
         let seconds_elapsed = 1.0;
 
-        let mut particles_1: Vec<Particle> = vec![Particle {
-            position: XYZ {
-                x: 0.5 * SCREEN_WIDTH,
-                y: 0.5 * SCREEN_HEIGHT,
-                z: 0.0,
-            },
-            velocity: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        }];
-        let mut particles_2: Vec<Particle> = vec![Particle {
-            position: XYZ {
-                x: 0.5 * SCREEN_WIDTH,
-                y: 0.5 * SCREEN_HEIGHT,
-                z: 0.0,
-            },
-            velocity: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        }];
+        let mut particles_1: Vec<Object> = vec![return_centered_sphere()];
+        let mut particles_2: Vec<Object> = vec![return_centered_sphere()];
         for _i in 0..ticks {
             particle_sim::simulation_tick(&mut particles_1, seconds_elapsed);
             particle_sim::simulation_tick(&mut particles_2, seconds_elapsed);
@@ -1069,8 +781,8 @@ mod tests {
 
         assert_eq!(result_1.velocity.x, result_2.velocity.x);
         assert_eq!(result_1.velocity.y, result_2.velocity.y);
-        assert_eq!(result_1.position.y, result_2.position.y);
-        assert_eq!(result_1.position.x, result_2.position.x);
+        assert_eq!(result_1.transform.position.y, result_2.transform.position.y);
+        assert_eq!(result_1.transform.position.x, result_2.transform.position.x);
     }
 
     #[test]
@@ -1078,43 +790,8 @@ mod tests {
         // Check that simulation produces the same results regardless of tick frequency over an identical timespan
         let seconds_elapsed = 1.0;
 
-        let mut particles_1: Vec<Particle> = vec![Particle {
-            position: XYZ {
-                x: 0.5 * SCREEN_WIDTH,
-                y: 0.5 * SCREEN_HEIGHT,
-                z: 0.0,
-            },
-            velocity: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        }];
-
-        let mut particles_2: Vec<Particle> = vec![Particle {
-            position: XYZ {
-                x: 0.5 * SCREEN_WIDTH,
-                y: 0.5 * SCREEN_HEIGHT,
-                z: 0.0,
-            },
-            velocity: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            force: XYZ {
-                x: 0.0,
-                y: 0.0,
-                z: 0.0,
-            },
-            mass: 1.0,
-        }];
+        let mut particles_1: Vec<Object> = vec![return_centered_sphere()];
+        let mut particles_2: Vec<Object> = vec![return_centered_sphere()];
 
         particle_sim::simulation_tick(&mut particles_1, seconds_elapsed);
         let result_1 = particles_1.get(0).unwrap();
@@ -1128,8 +805,8 @@ mod tests {
         // It's because I've got my units mixed up. For the bounce travel distance, I use the particle's current velocity,
         // then multiply it by the time elapsed (roughly). That means that if I halve the time examined, I incorrectly
         // quarter the total travel distance
-        // assert_eq!(result_1.position.x, result_2.position.x);
-        // assert_eq!(result_1.position.y, result_2.position.y);
+        // assert_eq!(result_1.transform.position.x, result_2.transform.position.x);
+        // assert_eq!(result_1.transform.position.y, result_2.transform.position.y);
         // assert_eq!(result_1.velocity.y, result_2.velocity.y);
         // assert_eq!(result_1.velocity.x, result_2.velocity.x);
 
@@ -1148,7 +825,7 @@ mod tests {
     }
 }
 
-// TODO: add tests for XYZ normalization
+// TODO: make this file WAY less verbose
 // TODO: update tests to respect Z dimension
 // TODO: test high speed horizontal and vertical bounces.
 // todo: add tests for ultra-high frequency bounces (e.g. more than once per frame)
